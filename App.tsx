@@ -133,8 +133,9 @@ function App() {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 py-8 grid grid-cols-1 xl:grid-cols-12 gap-8">
-        <div className="xl:col-span-4 space-y-6">
+      <main className="max-w-screen-2xl mx-auto px-4 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Left Sidebar: Form */}
+        <div className="lg:col-span-4 xl:col-span-3 space-y-6">
           <section>
              <h2 className="text-lg font-semibold text-slate-700 mb-4">Dados da Consulta</h2>
              <AssessmentForm data={data} onChange={setData} />
@@ -158,7 +159,8 @@ function App() {
           </section>
         </div>
 
-        <div className="xl:col-span-8 space-y-8">
+        {/* Right Content: Charts */}
+        <div className="lg:col-span-8 xl:col-span-9 space-y-8">
           <section>
             <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-4">
                <h2 className="text-lg font-semibold text-slate-700 flex items-center gap-2">
