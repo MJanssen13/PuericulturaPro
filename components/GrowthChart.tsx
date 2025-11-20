@@ -10,7 +10,7 @@ import {
   ResponsiveContainer
 } from 'recharts';
 import { Consultation, Sex, ReferenceDataPoint } from '../types';
-import { getReferenceTable } from '../services/referenceData';
+import { getReferenceTable, getInterpolatedReference } from '../services/referenceData';
 import { calculateAgeInDays } from '../services/puericulturaLogic';
 
 interface Props {
@@ -45,57 +45,37 @@ export const GrowthChart: React.FC<Props> = ({ birthDate, sex, consultations, me
     );
   }
 
-  // Generate chart data based on reference points
-  // We calculate DELTAS for Stacked Areas to create bands between lines
-  const chartData = refTable.map(point => {
-    const day = point.age_days;
-    
-    // Logic for Bands:
-    // Standard: 
-    // Red: < Z-3 and > Z+3
-    // Yellow: Z-3 to Z-2 and Z+2 to Z+3
-    // Green: Z-2 to Z+2
-    
-    // BMI Exception:
-    // Green: Z-2 to Z+1
-    // Yellow: Z+1 to Z+2 (Risk) AND Z+2 to Z+3 (Overweight)
-    
+  // Helper to transform a ReferenceDataPoint into the chart format (with ranges)
+  const transformPoint = (point: ReferenceDataPoint) => {
     const isBMI = measure === 'bmi';
 
-    // Base: From 0 (or very low) to Z-4. Using Z-4 as bottom line visible.
-    // Stack order: 
-    // 1. Invisible Base (up to Z-4)
-    // 2. Red Band (Z-4 to Z-3)
-    // 3. Yellow Band (Z-3 to Z-2)
-    // 4. Green Band (Z-2 to Z+2 OR Z-2 to Z+1 for BMI)
-    // 5. Yellow Band (Z+2 to Z+3 OR Z+1 to Z+3 for BMI)
-    // 6. Red Band (Z+3 to Z+4)
+    // Range Areas (Floating bands)
+    // Instead of stacking from 0, we define [min, max] for each band
     
-    const diff = (high: number, low: number) => high - low;
+    // Red Negative: Z-4 to Z-3
+    const range_red_neg = [point.z_neg_4, point.z_neg_3];
+    
+    // Yellow Negative: Z-3 to Z-2
+    const range_yellow_neg = [point.z_neg_3, point.z_neg_2];
+    
+    // Green: Z-2 to Z+2 (or Z+1 for BMI)
+    // BMI Exception: Green is Z-2 to Z+1
+    const range_green = isBMI 
+      ? [point.z_neg_2, point.z_pos_1]
+      : [point.z_neg_2, point.z_pos_2];
 
-    // Calculate band heights (deltas)
-    const band_red_neg = diff(point.z_neg_3, point.z_neg_4);
-    const band_yellow_neg = diff(point.z_neg_2, point.z_neg_3);
-    
-    let band_green = 0;
-    let band_yellow_pos = 0;
-    
-    if (isBMI) {
-        // BMI Green: Z-2 to Z+1
-        band_green = diff(point.z_pos_1, point.z_neg_2);
-        // BMI Yellow: Z+1 to Z+3 (Combines Risk + Overweight zones)
-        band_yellow_pos = diff(point.z_pos_3, point.z_pos_1);
-    } else {
-        // Standard Green: Z-2 to Z+2
-        band_green = diff(point.z_pos_2, point.z_neg_2);
-        // Standard Yellow: Z+2 to Z+3
-        band_yellow_pos = diff(point.z_pos_3, point.z_pos_2);
-    }
+    // Yellow Positive: 
+    // Standard: Z+2 to Z+3
+    // BMI: Z+1 to Z+3 (Risk + Overweight merged for visual simplicity in yellow)
+    const range_yellow_pos = isBMI
+      ? [point.z_pos_1, point.z_pos_3]
+      : [point.z_pos_2, point.z_pos_3];
 
-    const band_red_pos = diff(point.z_pos_4, point.z_pos_3);
+    // Red Positive: Z+3 to Z+4
+    const range_red_pos = [point.z_pos_3, point.z_pos_4];
 
     return {
-      day,
+      day: point.age_days,
       z_neg_4: point.z_neg_4,
       z_neg_3: point.z_neg_3,
       z_neg_2: point.z_neg_2,
@@ -106,17 +86,19 @@ export const GrowthChart: React.FC<Props> = ({ birthDate, sex, consultations, me
       z_pos_3: point.z_pos_3,
       z_pos_4: point.z_pos_4,
       
-      // Stacked Area Deltas
-      area_base: point.z_neg_4, // Invisible spacer
-      area_red_neg: band_red_neg,
-      area_yellow_neg: band_yellow_neg,
-      area_green: band_green,
-      area_yellow_pos: band_yellow_pos,
-      area_red_pos: band_red_pos
+      range_red_neg,
+      range_yellow_neg,
+      range_green,
+      range_yellow_pos,
+      range_red_pos
     };
-  });
+  };
 
-  // Patient points interpolation
+  // 1. Base Reference Data
+  const chartData = refTable.map(transformPoint);
+
+  // 2. Patient Data (Interpolated)
+  // We map patient points to the same structure so the background bands are continuous
   const patientPoints = consultations.map(c => {
     const ageDays = calculateAgeInDays(birthDate, c.date);
     let val = 0;
@@ -133,24 +115,31 @@ export const GrowthChart: React.FC<Props> = ({ birthDate, sex, consultations, me
     // Skip if val is invalid
     if (!val) return null;
 
+    // Get reference data for this exact day to fill the background
+    const refPoint = getInterpolatedReference(refTable, ageDays);
+    const baseData = refPoint ? transformPoint(refPoint) : {};
+
     return {
-      day: ageDays,
+      ...baseData,
+      day: ageDays, // Ensure exact day is used
       patientVal: val,
       isPatient: true
     };
   }).filter(Boolean);
 
-  // Combine data
-  const combinedData = [...chartData, ...patientPoints].sort((a: any, b: any) => a.day - b.day);
-
-  // Filter duplicates
-  const uniqueData = combinedData.reduce((acc: any[], current) => {
-    const x = acc.find((item: any) => item.day === current.day);
-    if (!x) {
+  // 3. Combine and Sort
+  // We prioritize patient points if they exist on the same day to show the dot
+  const allPoints = [...chartData, ...patientPoints].sort((a: any, b: any) => a.day - b.day);
+  
+  // Deduplicate by day (preferring patient data)
+  const uniqueData = allPoints.reduce((acc: any[], current) => {
+    const existingIndex = acc.findIndex((item: any) => item.day === current.day);
+    if (existingIndex === -1) {
       return acc.concat([current]);
     } else {
+      // If current has patient data, overwrite/merge
       if (current.isPatient) {
-        x.patientVal = current.patientVal;
+        acc[existingIndex] = { ...acc[existingIndex], ...current };
       }
       return acc;
     }
@@ -174,7 +163,6 @@ export const GrowthChart: React.FC<Props> = ({ birthDate, sex, consultations, me
   const C_RED = "#ef4444";    // Z 4
   const C_AMBER = "#f59e0b";  // Z 3
   const C_GREEN = "#22c55e";  // Z 0, 1, 2
-  const C_LIGHT_GREEN = "#86efac"; // Z 1
 
   // Fill Colors (lighter)
   const FILL_RED = "#fee2e2";
@@ -182,15 +170,13 @@ export const GrowthChart: React.FC<Props> = ({ birthDate, sex, consultations, me
   const FILL_GREEN = "#dcfce7";
 
   const getLineColor = (zType: string) => {
-     // Exception: BMI Z+2 is Yellow (Overweight boundary)
      if (measure === 'bmi' && zType === 'pos_2') return C_AMBER;
-     
      switch (zType) {
         case 'pos_4': case 'neg_4': return C_RED;
         case 'pos_3': case 'neg_3': return C_AMBER;
         case 'pos_2': case 'neg_2': return C_GREEN;
         case 'pos_1': case 'neg_1': return C_GREEN;
-        case 'zero': return "#15803d"; // Darker green for mean
+        case 'zero': return "#15803d";
         default: return "#ccc";
      }
   };
@@ -201,6 +187,26 @@ export const GrowthChart: React.FC<Props> = ({ birthDate, sex, consultations, me
     z_0: 'Média (0)',
     z_pos_1: 'Z +1', z_pos_2: 'Z +2', z_pos_3: 'Z +3', z_pos_4: 'Z +4',
     patientVal: 'Paciente'
+  };
+
+  // Custom Label Component for Patient Data
+  const CustomLabel = (props: any) => {
+    const { x, y, value } = props;
+    if (value === null || value === undefined) return null;
+    
+    let text = String(value);
+    if (measure === 'bmi') text = Number(value).toFixed(2).replace('.', ',');
+    else if (measure === 'weight') text = Math.round(Number(value)).toString();
+    else text = Number(value).toFixed(1).replace('.', ',');
+
+    return (
+      <g>
+        <rect x={x - 16} y={y - 22} width={32} height={16} rx={4} fill="white" fillOpacity={0.8} />
+        <text x={x} y={y} dy={-10} fill="#0f172a" fontSize={11} fontWeight={700} textAnchor="middle" style={{ pointerEvents: 'none', textShadow: '0 1px 2px rgba(255,255,255,0.8)' }}>
+          {text}
+        </text>
+      </g>
+    );
   };
 
   return (
@@ -214,7 +220,7 @@ export const GrowthChart: React.FC<Props> = ({ birthDate, sex, consultations, me
           </div>
       </div>
       <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart data={displayedData} margin={{ top: 10, right: 10, bottom: 10, left: 0 }}>
+        <ComposedChart data={displayedData} margin={{ top: 20, right: 20, bottom: 10, left: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
           <XAxis 
             dataKey="day" 
@@ -229,13 +235,22 @@ export const GrowthChart: React.FC<Props> = ({ birthDate, sex, consultations, me
                return `${months}m`;
             }}
           />
-          <YAxis domain={['auto', 'auto']} width={35} tick={{fontSize: 10}} />
+          {/* 
+            Using dataMin / dataMax allows the chart to scale to the data range 
+            (e.g. Height starting at 45cm instead of 0) 
+          */}
+          <YAxis 
+             domain={['dataMin', 'dataMax']} 
+             width={35} 
+             tick={{fontSize: 10}} 
+          />
           <Tooltip 
             contentStyle={{ fontSize: '12px', borderRadius: '8px', padding: '8px' }}
-            formatter={(value: number, name: string) => {
-                // Hide areas and z_0 (Média)
-                if (String(name).includes('area') || name === 'z_0') return [null, null];
-                return [value && value.toFixed ? value.toFixed(2) : value, nameMap[name] || name];
+            formatter={(value: any, name: string) => {
+                // Hide range arrays and z_0 (Mean) from tooltip
+                if (Array.isArray(value) || String(name).includes('range') || name === 'z_0') return [null, null];
+                const valNum = Number(value);
+                return [valNum && valNum.toFixed ? valNum.toFixed(2) : value, nameMap[name] || name];
             }}
             labelFormatter={(val) => {
                 const days = Number(val);
@@ -259,30 +274,20 @@ export const GrowthChart: React.FC<Props> = ({ birthDate, sex, consultations, me
             filterNull={true}
           />
           
-          {/* STACKED AREAS FOR BACKGROUND COLOR BANDS */}
-          <Area type="monotone" dataKey="area_base" stackId="bands" stroke="none" fill="none" isAnimationActive={false} />
-          
-          {/* Red Band (Z-4 to Z-3) */}
-          <Area type="monotone" dataKey="area_red_neg" stackId="bands" stroke="none" fill={FILL_RED} fillOpacity={0.6} isAnimationActive={false} />
-          
-          {/* Yellow Band (Z-3 to Z-2) */}
-          <Area type="monotone" dataKey="area_yellow_neg" stackId="bands" stroke="none" fill={FILL_AMBER} fillOpacity={0.6} isAnimationActive={false} />
-          
-          {/* Green Band (Z-2 to Z+2 OR Z+1 for BMI) */}
-          <Area type="monotone" dataKey="area_green" stackId="bands" stroke="none" fill={FILL_GREEN} fillOpacity={0.6} isAnimationActive={false} />
-          
-          {/* Yellow Band (Z+2 to Z+3 OR Z+1 to Z+3 for BMI) */}
-          <Area type="monotone" dataKey="area_yellow_pos" stackId="bands" stroke="none" fill={FILL_AMBER} fillOpacity={0.6} isAnimationActive={false} />
-          
-          {/* Red Band (Z+3 to Z+4) */}
-          <Area type="monotone" dataKey="area_red_pos" stackId="bands" stroke="none" fill={FILL_RED} fillOpacity={0.6} isAnimationActive={false} />
+          {/* RANGE AREAS (Floating bands) */}
+          <Area type="monotone" dataKey="range_red_neg" stroke="none" fill={FILL_RED} fillOpacity={0.6} isAnimationActive={false} />
+          <Area type="monotone" dataKey="range_yellow_neg" stroke="none" fill={FILL_AMBER} fillOpacity={0.6} isAnimationActive={false} />
+          <Area type="monotone" dataKey="range_green" stroke="none" fill={FILL_GREEN} fillOpacity={0.6} isAnimationActive={false} />
+          <Area type="monotone" dataKey="range_yellow_pos" stroke="none" fill={FILL_AMBER} fillOpacity={0.6} isAnimationActive={false} />
+          <Area type="monotone" dataKey="range_red_pos" stroke="none" fill={FILL_RED} fillOpacity={0.6} isAnimationActive={false} />
 
-          {/* LINES */}
+          {/* REFERENCE LINES */}
           <Line type="monotone" dataKey="z_pos_4" stroke={getLineColor('pos_4')} strokeWidth={1} strokeDasharray="3 3" dot={false} isAnimationActive={false} name="z_pos_4" />
           <Line type="monotone" dataKey="z_pos_3" stroke={getLineColor('pos_3')} strokeWidth={1} dot={false} isAnimationActive={false} name="z_pos_3" />
           <Line type="monotone" dataKey="z_pos_2" stroke={getLineColor('pos_2')} strokeWidth={2} dot={false} isAnimationActive={false} name="z_pos_2" />
           <Line type="monotone" dataKey="z_pos_1" stroke={getLineColor('pos_1')} strokeWidth={1} dot={false} isAnimationActive={false} name="z_pos_1" />
           
+          {/* Mean Line - Hidden from Tooltip via formatter, but visible on chart */}
           <Line type="monotone" dataKey="z_0"     stroke={getLineColor('zero')} strokeWidth={2} dot={false} isAnimationActive={false} name="z_0" />
           
           <Line type="monotone" dataKey="z_neg_1" stroke={getLineColor('neg_1')} strokeWidth={1} dot={false} isAnimationActive={false} name="z_neg_1" />
@@ -290,6 +295,7 @@ export const GrowthChart: React.FC<Props> = ({ birthDate, sex, consultations, me
           <Line type="monotone" dataKey="z_neg_3" stroke={getLineColor('neg_3')} strokeWidth={1} dot={false} isAnimationActive={false} name="z_neg_3" />
           <Line type="monotone" dataKey="z_neg_4" stroke={getLineColor('neg_4')} strokeWidth={1} strokeDasharray="3 3" dot={false} isAnimationActive={false} name="z_neg_4" />
 
+          {/* PATIENT LINE */}
           <Line 
             type="linear" 
             dataKey="patientVal" 
@@ -300,6 +306,7 @@ export const GrowthChart: React.FC<Props> = ({ birthDate, sex, consultations, me
             connectNulls 
             name="patientVal"
             isAnimationActive={true}
+            label={<CustomLabel />}
           />
         </ComposedChart>
       </ResponsiveContainer>

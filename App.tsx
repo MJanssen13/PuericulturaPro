@@ -17,12 +17,15 @@ import {
 } from '@heroicons/react/24/outline';
 
 function App() {
+  // Get today's date for default initialization
+  const today = new Date().toISOString().split('T')[0];
+
   const [data, setData] = useState<AssessmentData>({
-    birthDate: '2024-01-01',
+    birthDate: today,
     sex: 'Feminino',
     isFirstConsultation: false,
-    prev: { date: '2024-01-01', weight: 5356, height: 58, cephalic: 39 },
-    curr: { date: '2024-01-15', weight: 6047, height: 64, cephalic: 42 } 
+    prev: { date: today, weight: '', height: '', cephalic: '' },
+    curr: { date: today, weight: '', height: '', cephalic: '' } 
   });
 
   const [summary, setSummary] = useState('');
@@ -63,8 +66,12 @@ function App() {
     alert("Copiado para a área de transferência!");
   };
 
-  const chartConsultations: Consultation[] = [
-    { 
+  // Prepare Data for Charts
+  const chartConsultations: Consultation[] = [];
+
+  // Only add previous consultation if it exists AND it is NOT the first consultation
+  if (!data.isFirstConsultation && (data.prev.weight || data.prev.height)) {
+    chartConsultations.push({ 
       id: 'prev', 
       patient_id: 'temp', 
       date: data.prev.date, 
@@ -72,8 +79,12 @@ function App() {
       height_cm: Number(data.prev.height), 
       cephalic_cm: Number(data.prev.cephalic),
       bmi: 0
-    },
-    { 
+    });
+  }
+
+  // Always add current consultation if data exists
+  if (data.curr.weight || data.curr.height) {
+    chartConsultations.push({ 
       id: 'curr', 
       patient_id: 'temp', 
       date: data.curr.date, 
@@ -81,8 +92,8 @@ function App() {
       height_cm: Number(data.curr.height), 
       cephalic_cm: Number(data.curr.cephalic),
       bmi: 0
-    }
-  ];
+    });
+  }
 
   const chartOptions = [
     { id: 'weight', label: 'Peso' },

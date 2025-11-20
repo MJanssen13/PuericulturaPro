@@ -21,6 +21,8 @@ interface AnalysisItem {
 }
 
 export const ResultsTable: React.FC<Props> = ({ data }) => {
+  const showPrev = !data.isFirstConsultation;
+
   const [analysis, setAnalysis] = useState({
     prevAge: '',
     currAge: '',
@@ -75,11 +77,17 @@ export const ResultsTable: React.FC<Props> = ({ data }) => {
       ]);
 
       // 1. Calculate Velocity Texts (Weight / Height)
-      const wText = evaluateWeightGain(data.birthDate, data.prev.date, Number(data.prev.weight), data.curr.date, Number(data.curr.weight));
-      const hText = evaluateHeightGrowth(data.birthDate, data.prev.date, Number(data.prev.height), data.curr.date, Number(data.curr.height));
+      let wText = '';
+      let hText = '';
+      let wStatus = 'neutral';
+      let hStatus = 'neutral';
 
-      const wStatus = wText.includes('Adequado') ? 'good' : (wText.includes('Abaixo') || wText.includes('Acima') ? 'warning' : 'neutral');
-      const hStatus = hText.includes('Adequado') ? 'good' : (hText.includes('Abaixo') || hText.includes('Acima') ? 'warning' : 'neutral');
+      if (!data.isFirstConsultation) {
+        wText = evaluateWeightGain(data.birthDate, data.prev.date, Number(data.prev.weight), data.curr.date, Number(data.curr.weight));
+        hText = evaluateHeightGrowth(data.birthDate, data.prev.date, Number(data.prev.height), data.curr.date, Number(data.curr.height));
+        wStatus = wText.includes('Adequado') ? 'good' : (wText.includes('Abaixo') || wText.includes('Acima') ? 'warning' : 'neutral');
+        hStatus = hText.includes('Adequado') ? 'good' : (hText.includes('Abaixo') || hText.includes('Acima') ? 'warning' : 'neutral');
+      }
 
       // 2. Calculate PC Analysis (Comparison against Range Z-2 to Z+2)
       const prevRefC = await getRawReference(data.birthDate, data.prev.date, data.sex, 'cephalic');
@@ -109,12 +117,14 @@ export const ResultsTable: React.FC<Props> = ({ data }) => {
 
       const pcText = (
         <div className="flex flex-col gap-1">
-          <span className={getColor(currPCSt.isGood, currPCSt.statusText)}>
-             <span className="font-semibold text-slate-600">Atual:</span> {currPCSt.statusText} <span className="text-slate-400 font-normal">(Faixa: {currPCSt.rangeText})</span>
+          <span className={`${getColor(currPCSt.isGood, currPCSt.statusText)} text-sm`}>
+             <span className="font-bold text-slate-600">Atual:</span> <span className="font-semibold text-sm">{currPCSt.statusText}</span> <span className="text-slate-500 font-normal ml-1">(Faixa: {currPCSt.rangeText})</span>
           </span>
-          <span className={getColor(prevPCSt.isGood, prevPCSt.statusText)}>
-             <span className="font-semibold text-slate-600">Anterior:</span> {prevPCSt.statusText} <span className="text-slate-400 font-normal">(Faixa: {prevPCSt.rangeText})</span>
-          </span>
+          {!data.isFirstConsultation && (
+            <span className={`${getColor(prevPCSt.isGood, prevPCSt.statusText)} text-sm`}>
+               <span className="font-bold text-slate-600">Anterior:</span> <span className="font-semibold text-sm">{prevPCSt.statusText}</span> <span className="text-slate-500 font-normal ml-1">(Faixa: {prevPCSt.rangeText})</span>
+            </span>
+          )}
         </div>
       );
 
@@ -127,12 +137,14 @@ export const ResultsTable: React.FC<Props> = ({ data }) => {
       
       const bmiText = (
         <div className="flex flex-col gap-1">
-          <span className={isEutrofia(currDiag) ? 'text-emerald-600' : 'text-amber-600'}>
-             <span className="font-semibold text-slate-600">Atual:</span> {currDiag}
+          <span className={`${isEutrofia(currDiag) ? 'text-emerald-600' : 'text-amber-600'} text-sm`}>
+             <span className="font-bold text-slate-600">Atual:</span> <span className="font-semibold text-sm">{currDiag}</span>
           </span>
-          <span className={isEutrofia(prevDiag) ? 'text-emerald-600' : 'text-amber-600'}>
-             <span className="font-semibold text-slate-600">Anterior:</span> {prevDiag}
-          </span>
+          {!data.isFirstConsultation && (
+            <span className={`${isEutrofia(prevDiag) ? 'text-emerald-600' : 'text-amber-600'} text-sm`}>
+               <span className="font-bold text-slate-600">Anterior:</span> <span className="font-semibold text-sm">{prevDiag}</span>
+            </span>
+          )}
         </div>
       );
 
@@ -155,8 +167,8 @@ export const ResultsTable: React.FC<Props> = ({ data }) => {
           bmi: currBMI - prevBMI
         },
         blocks: {
-          weight: { status: wStatus as any, text: wText || '-' },
-          height: { status: hStatus as any, text: hText || '-' },
+          weight: { status: wStatus as any, text: wText || '' },
+          height: { status: hStatus as any, text: hText || '' },
           cephalic: { status: pcBlockStatus as any, text: pcText },
           bmi: { status: bmiBlockStatus as any, text: bmiText }
         }
@@ -193,17 +205,11 @@ export const ResultsTable: React.FC<Props> = ({ data }) => {
   };
 
   const renderZBadge = (zScore: string, isBMI = false) => {
-    const diag = isBMI ? getBMIDiagnosis(zScore) : '';
     return (
       <div className="flex flex-col items-center">
         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${getZBadgeClass(zScore)}`}>
           Z: {zScore || 'N/A'}
         </span>
-        {isBMI && diag && (
-           <span className={`text-[10px] mt-1 font-bold uppercase tracking-tight ${zScore.includes('Eutrofia') ? 'text-emerald-600' : 'text-amber-600'}`}>
-             {diag}
-           </span>
-        )}
       </div>
     );
   };
@@ -224,15 +230,19 @@ export const ResultsTable: React.FC<Props> = ({ data }) => {
         <thead>
           <tr className="bg-slate-50 border-b border-slate-200">
             <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider w-32">Indicador</th>
-            <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-center bg-slate-50/80 border-l border-slate-200/50">
-               Anterior <span className="block text-[10px] font-normal text-slate-400 mt-0.5">{formatDateShort(data.prev.date)}</span>
-            </th>
+            {showPrev && (
+                <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-center bg-slate-50/80 border-l border-slate-200/50">
+                   Anterior <span className="block text-[10px] font-normal text-slate-400 mt-0.5">{formatDateShort(data.prev.date)}</span>
+                </th>
+            )}
             <th className="py-3 px-4 text-xs font-bold text-teal-700 uppercase tracking-wider text-center bg-teal-50/30 border-l border-slate-200/50 border-r border-slate-200/50">
                Atual <span className="block text-[10px] font-normal text-teal-600/70 mt-0.5">{formatDateShort(data.curr.date)}</span>
             </th>
-            <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-center w-28">
-               Diferença
-            </th>
+            {showPrev && (
+                <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-center w-28">
+                   Diferença
+                </th>
+            )}
             <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider w-1/3">
                Análise / Velocidade
             </th>
@@ -244,12 +254,14 @@ export const ResultsTable: React.FC<Props> = ({ data }) => {
           <tr className="hover:bg-slate-50/50 transition-colors">
             <td className="py-4 px-4 font-semibold text-slate-700">Peso (g)</td>
             
-            <td className="py-4 px-4 text-center border-l border-slate-50">
-              <div className="flex flex-col items-center gap-1">
-                 <span className="text-slate-600 tabular-nums text-base">{data.prev.weight}</span>
-                 {renderZBadge(analysis.zScore.prevW)}
-              </div>
-            </td>
+            {showPrev && (
+                <td className="py-4 px-4 text-center border-l border-slate-50">
+                <div className="flex flex-col items-center gap-1">
+                    <span className="text-slate-600 tabular-nums text-base">{data.prev.weight}</span>
+                    {renderZBadge(analysis.zScore.prevW)}
+                </div>
+                </td>
+            )}
 
             <td className="py-4 px-4 text-center bg-teal-50/10 border-x border-slate-100">
               <div className="flex flex-col items-center gap-1">
@@ -258,14 +270,16 @@ export const ResultsTable: React.FC<Props> = ({ data }) => {
               </div>
             </td>
 
-            <td className="py-4 px-4 text-center">
-              <div className="flex items-center justify-center gap-1">
-                {renderTrendIcon(analysis.diff.weight)}
-                <span className={`font-medium tabular-nums text-sm ${analysis.diff.weight > 0 ? 'text-emerald-600' : analysis.diff.weight < 0 ? 'text-rose-600' : 'text-slate-400'}`}>
-                  {analysis.diff.weight > 0 ? '+' : ''}{analysis.diff.weight} g
-                </span>
-              </div>
-            </td>
+            {showPrev && (
+                <td className="py-4 px-4 text-center">
+                <div className="flex items-center justify-center gap-1">
+                    {renderTrendIcon(analysis.diff.weight)}
+                    <span className={`font-medium tabular-nums text-sm ${analysis.diff.weight > 0 ? 'text-emerald-600' : analysis.diff.weight < 0 ? 'text-rose-600' : 'text-slate-400'}`}>
+                    {analysis.diff.weight > 0 ? '+' : ''}{analysis.diff.weight} g
+                    </span>
+                </div>
+                </td>
+            )}
 
             <td className="py-4 px-4">
                <span className={getAnalysisTextClass(analysis.blocks.weight.status)}>
@@ -278,12 +292,14 @@ export const ResultsTable: React.FC<Props> = ({ data }) => {
           <tr className="hover:bg-slate-50/50 transition-colors">
             <td className="py-4 px-4 font-semibold text-slate-700">Altura (cm)</td>
             
-            <td className="py-4 px-4 text-center border-l border-slate-50">
-              <div className="flex flex-col items-center gap-1">
-                 <span className="text-slate-600 tabular-nums text-base">{formatNum(data.prev.height)}</span>
-                 {renderZBadge(analysis.zScore.prevH)}
-              </div>
-            </td>
+            {showPrev && (
+                <td className="py-4 px-4 text-center border-l border-slate-50">
+                <div className="flex flex-col items-center gap-1">
+                    <span className="text-slate-600 tabular-nums text-base">{formatNum(data.prev.height)}</span>
+                    {renderZBadge(analysis.zScore.prevH)}
+                </div>
+                </td>
+            )}
 
             <td className="py-4 px-4 text-center bg-teal-50/10 border-x border-slate-100">
               <div className="flex flex-col items-center gap-1">
@@ -292,14 +308,16 @@ export const ResultsTable: React.FC<Props> = ({ data }) => {
               </div>
             </td>
 
-            <td className="py-4 px-4 text-center">
-               <div className="flex items-center justify-center gap-1">
-                {renderTrendIcon(analysis.diff.height)}
-                <span className={`font-medium tabular-nums text-sm ${analysis.diff.height > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
-                  {analysis.diff.height > 0 ? '+' : ''}{formatNum(analysis.diff.height)} cm
-                </span>
-              </div>
-            </td>
+            {showPrev && (
+                <td className="py-4 px-4 text-center">
+                <div className="flex items-center justify-center gap-1">
+                    {renderTrendIcon(analysis.diff.height)}
+                    <span className={`font-medium tabular-nums text-sm ${analysis.diff.height > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
+                    {analysis.diff.height > 0 ? '+' : ''}{formatNum(analysis.diff.height)} cm
+                    </span>
+                </div>
+                </td>
+            )}
 
             <td className="py-4 px-4">
                <span className={getAnalysisTextClass(analysis.blocks.height.status)}>
@@ -312,12 +330,14 @@ export const ResultsTable: React.FC<Props> = ({ data }) => {
           <tr className="hover:bg-slate-50/50 transition-colors">
             <td className="py-4 px-4 font-semibold text-slate-700">P. Cefálico (cm)</td>
             
-            <td className="py-4 px-4 text-center border-l border-slate-50">
-              <div className="flex flex-col items-center gap-1">
-                 <span className="text-slate-600 tabular-nums text-base">{formatNum(data.prev.cephalic)}</span>
-                 {renderZBadge(analysis.zScore.prevC)}
-              </div>
-            </td>
+            {showPrev && (
+                <td className="py-4 px-4 text-center border-l border-slate-50">
+                <div className="flex flex-col items-center gap-1">
+                    <span className="text-slate-600 tabular-nums text-base">{formatNum(data.prev.cephalic)}</span>
+                    {renderZBadge(analysis.zScore.prevC)}
+                </div>
+                </td>
+            )}
 
             <td className="py-4 px-4 text-center bg-teal-50/10 border-x border-slate-100">
               <div className="flex flex-col items-center gap-1">
@@ -326,14 +346,16 @@ export const ResultsTable: React.FC<Props> = ({ data }) => {
               </div>
             </td>
 
-            <td className="py-4 px-4 text-center">
-              <div className="flex items-center justify-center gap-1">
-                {renderTrendIcon(analysis.diff.cephalic)}
-                <span className="text-slate-500 font-medium tabular-nums text-sm">
-                  {formatNum(analysis.diff.cephalic)} cm
-                </span>
-              </div>
-            </td>
+            {showPrev && (
+                <td className="py-4 px-4 text-center">
+                <div className="flex items-center justify-center gap-1">
+                    {renderTrendIcon(analysis.diff.cephalic)}
+                    <span className="text-slate-500 font-medium tabular-nums text-sm">
+                    {formatNum(analysis.diff.cephalic)} cm
+                    </span>
+                </div>
+                </td>
+            )}
 
             <td className="py-4 px-4">
                {analysis.blocks.cephalic.text}
@@ -344,12 +366,14 @@ export const ResultsTable: React.FC<Props> = ({ data }) => {
           <tr className="hover:bg-slate-50/50 transition-colors">
             <td className="py-4 px-4 font-semibold text-slate-700">IMC</td>
             
-            <td className="py-4 px-4 text-center border-l border-slate-50">
-              <div className="flex flex-col items-center gap-1">
-                 <span className="text-slate-600 tabular-nums text-base">{formatNum(analysis.prevBMI, 2)}</span>
-                 {renderZBadge(analysis.zScore.prevB, true)}
-              </div>
-            </td>
+            {showPrev && (
+                <td className="py-4 px-4 text-center border-l border-slate-50">
+                <div className="flex flex-col items-center gap-1">
+                    <span className="text-slate-600 tabular-nums text-base">{formatNum(analysis.prevBMI, 2)}</span>
+                    {renderZBadge(analysis.zScore.prevB, true)}
+                </div>
+                </td>
+            )}
 
             <td className="py-4 px-4 text-center bg-teal-50/10 border-x border-slate-100">
               <div className="flex flex-col items-center gap-1">
@@ -358,14 +382,16 @@ export const ResultsTable: React.FC<Props> = ({ data }) => {
               </div>
             </td>
 
-            <td className="py-4 px-4 text-center">
-              <div className="flex items-center justify-center gap-1">
-                 {renderTrendIcon(analysis.diff.bmi)}
-                 <span className="text-slate-500 font-medium tabular-nums text-sm">
-                   {formatNum(analysis.diff.bmi, 2)}
-                 </span>
-              </div>
-            </td>
+            {showPrev && (
+                <td className="py-4 px-4 text-center">
+                <div className="flex items-center justify-center gap-1">
+                    {renderTrendIcon(analysis.diff.bmi)}
+                    <span className="text-slate-500 font-medium tabular-nums text-sm">
+                    {formatNum(analysis.diff.bmi, 2)}
+                    </span>
+                </div>
+                </td>
+            )}
 
             <td className="py-4 px-4">
                {analysis.blocks.bmi.text}
@@ -375,11 +401,15 @@ export const ResultsTable: React.FC<Props> = ({ data }) => {
           {/* AGE ROW */}
           <tr className="bg-slate-50 text-xs border-t border-slate-200">
             <td className="py-3 px-4 font-bold text-slate-500 uppercase tracking-wider">Idade Calculada</td>
-            <td className="py-3 px-4 text-center font-mono text-slate-600 border-l border-slate-200">{analysis.prevAge}</td>
+            {showPrev && <td className="py-3 px-4 text-center font-mono text-slate-600 border-l border-slate-200">{analysis.prevAge}</td>}
             <td className="py-3 px-4 text-center font-mono text-teal-700 font-medium border-l border-slate-200 bg-teal-50/30">{analysis.currAge}</td>
-            <td className="py-3 px-4 text-center font-mono text-slate-500 border-l border-slate-200" colSpan={2}>
-               Intervalo: <span className="font-bold">{analysis.diff.days} dias</span>
-            </td>
+            {showPrev ? (
+               <td className="py-3 px-4 text-center font-mono text-slate-500 border-l border-slate-200" colSpan={2}>
+                  Intervalo: <span className="font-bold">{analysis.diff.days} dias</span>
+               </td>
+            ) : (
+               <td className="py-3 px-4 border-l border-slate-200"></td>
+            )}
           </tr>
         </tbody>
       </table>
