@@ -60,16 +60,17 @@ export const AssessmentForm: React.FC<Props> = ({ data, onChange }) => {
     return bmi.toFixed(2).replace('.', ',');
   };
 
+  // Compact Input Styles
   const cleanInputClass = `
-    block w-full rounded-lg border-gray-300 bg-white 
-    py-2.5 px-3 text-base text-gray-900 
+    block w-full rounded-md border-gray-300 bg-white 
+    py-1.5 px-2.5 text-sm text-gray-900 
     border shadow-sm
     placeholder:text-gray-300
     focus:border-teal-500 focus:ring-1 focus:ring-teal-500 focus:outline-none
     [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none
   `;
 
-  const labelClass = "block text-[11px] font-bold text-slate-500 uppercase mb-1.5 ml-0.5";
+  const labelClass = "block text-[10px] font-bold text-slate-500 uppercase mb-1 ml-0.5";
 
   const renderZ = (val: string) => {
     if (!val || val === 'N/A') return null;
@@ -85,24 +86,24 @@ export const AssessmentForm: React.FC<Props> = ({ data, onChange }) => {
     }
 
     return (
-      <div className={`mt-2 w-full rounded-lg border py-2.5 px-3 text-sm font-bold shadow-sm ${colorStyles}`}>
+      <div className={`mt-1 w-full rounded border py-1 px-2 text-xs font-bold shadow-sm ${colorStyles}`}>
         Z: {val}
       </div>
     );
   };
 
   return (
-    <div className="space-y-6 font-inter">
+    <div className="space-y-4 font-inter">
       
       {/* CARD PACIENTE */}
-      <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-[0_2px_8px_rgba(0,0,0,0.02)]">
-        <div className="flex items-center gap-2 mb-4 pb-2 border-b border-slate-100">
-           <div className="p-1.5 bg-slate-100 rounded-md">
-             <UserIcon className="w-4 h-4 text-slate-600" />
+      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-[0_2px_8px_rgba(0,0,0,0.02)]">
+        <div className="flex items-center gap-2 mb-3 pb-2 border-b border-slate-100">
+           <div className="p-1 bg-slate-100 rounded">
+             <UserIcon className="w-3.5 h-3.5 text-slate-600" />
            </div>
-           <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wide">Dados do Paciente</h3>
+           <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wide">Dados do Paciente</h3>
         </div>
-        <div className="grid grid-cols-1 gap-4">
+        <div className="grid grid-cols-1 gap-3">
           <div>
             <label className={labelClass}>Data de Nascimento</label>
             <input 
@@ -117,13 +118,13 @@ export const AssessmentForm: React.FC<Props> = ({ data, onChange }) => {
             <div className="flex gap-2">
               <button 
                 onClick={() => handleChange('root', 'sex', 'Masculino')}
-                className={`flex-1 py-2 rounded-lg border text-sm font-semibold transition-all ${data.sex === 'Masculino' ? 'bg-blue-50 border-blue-200 text-blue-700 ring-1 ring-blue-200' : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'}`}
+                className={`flex-1 py-1.5 rounded-md border text-xs font-semibold transition-all ${data.sex === 'Masculino' ? 'bg-blue-50 border-blue-200 text-blue-700 ring-1 ring-blue-200' : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'}`}
               >
                 Masculino
               </button>
               <button 
                  onClick={() => handleChange('root', 'sex', 'Feminino')}
-                 className={`flex-1 py-2 rounded-lg border text-sm font-semibold transition-all ${data.sex === 'Feminino' ? 'bg-pink-50 border-pink-200 text-pink-700 ring-1 ring-pink-200' : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'}`}
+                 className={`flex-1 py-1.5 rounded-md border text-xs font-semibold transition-all ${data.sex === 'Feminino' ? 'bg-pink-50 border-pink-200 text-pink-700 ring-1 ring-pink-200' : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'}`}
               >
                 Feminino
               </button>
@@ -133,11 +134,11 @@ export const AssessmentForm: React.FC<Props> = ({ data, onChange }) => {
             <input
               type="checkbox"
               id="firstConsult"
-              className="h-4 w-4 text-teal-600 focus:ring-teal-500 border-gray-300 rounded cursor-pointer"
+              className="h-3.5 w-3.5 text-teal-600 focus:ring-teal-500 border-gray-300 rounded cursor-pointer"
               checked={!!data.isFirstConsultation}
               onChange={(e) => handleChange('root', 'isFirstConsultation', e.target.checked)}
             />
-            <label htmlFor="firstConsult" className="text-sm text-gray-600 font-medium cursor-pointer select-none">
+            <label htmlFor="firstConsult" className="text-xs text-gray-600 font-medium cursor-pointer select-none">
               É a primeira consulta
             </label>
           </div>
@@ -146,17 +147,17 @@ export const AssessmentForm: React.FC<Props> = ({ data, onChange }) => {
 
       {/* CONSULTA ANTERIOR */}
       {!data.isFirstConsultation && (
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-[0_2px_8px_rgba(0,0,0,0.02)]">
-           <div className="flex items-center gap-2 mb-5 pb-2 border-b border-slate-100">
-              <div className="p-1.5 bg-slate-100 rounded-md">
-                <CalendarDaysIcon className="w-4 h-4 text-slate-600" />
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-[0_2px_8px_rgba(0,0,0,0.02)]">
+           <div className="flex items-center gap-2 mb-3 pb-2 border-b border-slate-100">
+              <div className="p-1 bg-slate-100 rounded">
+                <CalendarDaysIcon className="w-3.5 h-3.5 text-slate-600" />
               </div>
-              <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wide">Última Consulta</h3>
+              <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wide">Última Consulta</h3>
            </div>
 
-           <div className="space-y-5">
+           <div className="space-y-3">
               {/* ROW 1: DATE | AGE */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className={labelClass}>Data</label>
                   <input 
@@ -168,14 +169,14 @@ export const AssessmentForm: React.FC<Props> = ({ data, onChange }) => {
                 </div>
                 <div>
                   <label className={labelClass}>Idade</label>
-                  <div className="block w-full rounded-lg border border-slate-200 bg-slate-50 py-2.5 px-3 text-base text-slate-500 cursor-default shadow-sm">
+                  <div className="block w-full rounded-md border border-slate-200 bg-slate-50 py-1.5 px-2.5 text-sm text-slate-500 cursor-default shadow-sm">
                     {prevAge}
                   </div>
                 </div>
               </div>
               
               {/* ROW 2: WEIGHT | HEIGHT */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className={labelClass}>Peso (g)</label>
                   <input 
@@ -201,7 +202,7 @@ export const AssessmentForm: React.FC<Props> = ({ data, onChange }) => {
               </div>
 
               {/* ROW 3: CEPHALIC | BMI */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className={labelClass}>PC (cm)</label>
                   <input 
@@ -215,7 +216,7 @@ export const AssessmentForm: React.FC<Props> = ({ data, onChange }) => {
                 </div>
                 <div>
                    <label className={labelClass}>IMC</label>
-                   <div className="block w-full rounded-lg border border-slate-200 bg-slate-50 py-2.5 px-3 text-base text-slate-600 cursor-default shadow-sm">
+                   <div className="block w-full rounded-md border border-slate-200 bg-slate-50 py-1.5 px-2.5 text-sm text-slate-600 cursor-default shadow-sm">
                      {calculateBMI(data.prev.weight, data.prev.height)}
                    </div>
                    {renderZ(zScores.prev.bmi)}
@@ -226,17 +227,17 @@ export const AssessmentForm: React.FC<Props> = ({ data, onChange }) => {
       )}
 
       {/* CONSULTA ATUAL */}
-      <div className="bg-white p-5 rounded-xl border border-teal-200 shadow-[0_2px_8px_rgba(20,184,166,0.1)] ring-1 ring-teal-500/20">
-        <div className="flex items-center gap-2 mb-5 pb-2 border-b border-teal-100">
-          <div className="p-1.5 bg-teal-100 rounded-md">
-            <CalendarDaysIcon className="w-4 h-4 text-teal-700" />
+      <div className="bg-white p-4 rounded-xl border border-teal-200 shadow-[0_2px_8px_rgba(20,184,166,0.1)] ring-1 ring-teal-500/20">
+        <div className="flex items-center gap-2 mb-3 pb-2 border-b border-teal-100">
+          <div className="p-1 bg-teal-100 rounded">
+            <CalendarDaysIcon className="w-3.5 h-3.5 text-teal-700" />
           </div>
-          <h3 className="text-sm font-bold text-teal-800 uppercase tracking-wide">Consulta Atual</h3>
+          <h3 className="text-xs font-bold text-teal-800 uppercase tracking-wide">Consulta Atual</h3>
         </div>
 
-        <div className="space-y-5">
+        <div className="space-y-3">
             {/* ROW 1: DATE | AGE */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className={labelClass}>Data</label>
                 <input 
@@ -248,14 +249,14 @@ export const AssessmentForm: React.FC<Props> = ({ data, onChange }) => {
               </div>
               <div>
                 <label className={labelClass}>Idade</label>
-                <div className="block w-full rounded-lg border border-slate-200 bg-slate-50 py-2.5 px-3 text-base text-slate-500 cursor-default shadow-sm">
+                <div className="block w-full rounded-md border border-slate-200 bg-slate-50 py-1.5 px-2.5 text-sm text-slate-500 cursor-default shadow-sm">
                   {currAge}
                 </div>
               </div>
             </div>
             
             {/* ROW 2: WEIGHT | HEIGHT */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className={labelClass}>Peso (g)</label>
                 <input 
@@ -281,7 +282,7 @@ export const AssessmentForm: React.FC<Props> = ({ data, onChange }) => {
             </div>
 
             {/* ROW 3: CEPHALIC | BMI */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className={labelClass}>PC (cm)</label>
                 <input 
@@ -295,7 +296,7 @@ export const AssessmentForm: React.FC<Props> = ({ data, onChange }) => {
               </div>
               <div>
                    <label className={labelClass}>IMC</label>
-                   <div className="block w-full rounded-lg border border-slate-200 bg-slate-50 py-2.5 px-3 text-base text-slate-600 cursor-default shadow-sm">
+                   <div className="block w-full rounded-md border border-slate-200 bg-slate-50 py-1.5 px-2.5 text-sm text-slate-600 cursor-default shadow-sm">
                      {calculateBMI(data.curr.weight, data.curr.height)}
                    </div>
                    {renderZ(zScores.curr.bmi)}

@@ -1,5 +1,5 @@
 
-import { Sex } from '../types';
+import { Sex, ReferenceDataPoint } from '../types';
 import { getReferenceTable, getInterpolatedReference } from './referenceData';
 
 // ================================================================
@@ -62,7 +62,7 @@ export function evaluateWeightGain(
   const ganhoDiario = ganhoGramas / intervaloDias;
   let interpretacao = "Adequado";
 
-  // Parâmetros simplificados para demonstração
+  // Parâmetros simplificados
   if (idadeDias <= 365) {
     if (idadeDias <= 90) { 
       if (ganhoDiario < 20) interpretacao = "Abaixo do esperado";
@@ -116,6 +116,51 @@ export function evaluateHeightGrowth(
   return `${crescimentoMensal.toFixed(1).replace('.', ',')} cm/mês (${interpretacao})`;
 }
 
+export function evaluateCephalicGrowth(
+  birthDate: string,
+  prevDate: string,
+  prevCephalic: number,
+  currDate: string,
+  currCephalic: number
+): string {
+  if (!prevDate || !prevCephalic || !currDate || !currCephalic) return "";
+
+  const idadeDias = calculateAgeInDays(birthDate, currDate);
+  const dtAnt = new Date(prevDate);
+  const dtAtual = new Date(currDate);
+  const intervaloDias = Math.floor((dtAtual.getTime() - dtAnt.getTime()) / (1000 * 3600 * 24));
+
+  if (intervaloDias <= 0) return "Erro data";
+
+  const diffCm = currCephalic - prevCephalic;
+  const diffMensal = (diffCm / intervaloDias) * 30.44;
+  
+  // Faixas esperadas aproximadas (referência prática)
+  let min = 0, max = 0;
+  if (idadeDias <= 90) { min = 1.5; max = 2.0; } // 0-3m: ~2cm/mês
+  else if (idadeDias <= 180) { min = 0.5; max = 1.0; } // 3-6m: ~1cm/mês
+  else if (idadeDias <= 365) { min = 0.3; max = 0.5; } // 6-12m: ~0.5cm/mês
+  else { min = 0.1; max = 0.3; }
+
+  const faixaStr = `${min.toString().replace('.',',')} a ${max.toString().replace('.',',')} cm/mês`;
+  
+  return `${diffMensal.toFixed(1).replace('.', ',')} cm/mês (Esperado: ${faixaStr})`;
+}
+
+export function getBMIDiagnosis(zScore: string): string {
+  if (!zScore || zScore === 'N/A') return "";
+  
+  if (zScore.includes("> +3")) return "Obesidade";
+  if (zScore.includes("Entre +2 e +3")) return "Sobrepeso";
+  if (zScore.includes("Entre +1 e +2")) return "Risco de Sobrepeso";
+  if (zScore.includes("Entre 0 e +1")) return "Eutrofia";
+  if (zScore.includes("Entre -1 e 0")) return "Eutrofia";
+  if (zScore.includes("Entre -2 e -1")) return "Eutrofia";
+  if (zScore.includes("Entre -3 e -2")) return "Magreza";
+  if (zScore.includes("< -3")) return "Magreza Acentuada";
+  return "";
+}
+
 // ================================================================
 // Z-SCORE EVALUATION
 // ================================================================
@@ -146,6 +191,18 @@ export async function evaluateZScore(
   return "> +3";
 }
 
+// NEW: Get raw reference object for detailed range analysis
+export async function getRawReference(
+  birthDate: string,
+  date: string,
+  sex: Sex,
+  measure: 'weight' | 'height' | 'cephalic' | 'bmi'
+): Promise<ReferenceDataPoint | null> {
+  const ageDays = calculateAgeInDays(birthDate, date);
+  const table = await getReferenceTable(measure, sex);
+  return getInterpolatedReference(table, ageDays);
+}
+
 // ================================================================
 // SUMMARY GENERATOR (PRONTUÁRIO)
 // ================================================================
@@ -163,8 +220,6 @@ export async function generateSummary(
   // Helper to get Z-score text safely
   const getZ = async (date: string, val: number, type: 'weight'|'height'|'cephalic'|'bmi') => {
      if (!date || !val) return "N/A";
-     // Note: We no longer convert weight to KG here because the DB table is in Grams (e.g. 5356)
-     // and the input is in Grams.
      return await evaluateZScore(birthDate, date, val, sex, type);
   };
 
