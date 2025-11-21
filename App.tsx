@@ -1,10 +1,10 @@
-
 import React, { useState, useEffect } from 'react';
 import { AssessmentData, Consultation } from './types';
 import { AssessmentForm } from './components/AssessmentForm';
 import { generateSummary } from './services/puericulturaLogic';
 import { GrowthChart } from './components/GrowthChart';
 import { ResultsTable } from './components/ResultsTable';
+import { VaccinationCard } from './components/VaccinationCard';
 import { checkSupabaseConnection } from './lib/supabase';
 import { 
   CalculatorIcon, 
@@ -14,7 +14,8 @@ import {
   ChartPieIcon,
   ClockIcon,
   ClipboardDocumentListIcon,
-  TableCellsIcon
+  TableCellsIcon,
+  BeakerIcon
 } from '@heroicons/react/24/outline';
 
 function App() {
@@ -31,6 +32,9 @@ function App() {
 
   const [summary, setSummary] = useState('');
   const [dbStatus, setDbStatus] = useState<'checking' | 'connected' | 'offline'>('checking');
+
+  // Navigation State
+  const [activeTab, setActiveTab] = useState<'growth' | 'vaccines'>('growth');
 
   // State para os Gráficos
   const [activeMeasure, setActiveMeasure] = useState<'weight' | 'height' | 'cephalic' | 'bmi'>('weight');
@@ -150,7 +154,7 @@ function App() {
 
       <main className="max-w-[1600px] mx-auto px-4 py-4 grid grid-cols-1 lg:grid-cols-12 gap-4">
         
-        {/* BARRA LATERAL (1/3 = 4 cols) */}
+        {/* BARRA LATERAL (Sempre visível) */}
         <div className="lg:col-span-4 space-y-4">
           <section>
              <div className="flex items-center gap-2 mb-2">
@@ -182,85 +186,127 @@ function App() {
           </section>
         </div>
 
-        {/* CONTEÚDO PRINCIPAL (2/3 = 8 cols) */}
+        {/* CONTEÚDO PRINCIPAL (Abas) */}
         <div className="lg:col-span-8 space-y-4">
           
-          {/* 1. Tabela de Resultados e Análise */}
-          <section>
-             <div className="flex items-center gap-2 mb-2">
-               <TableCellsIcon className="w-5 h-5 text-teal-600" />
-               <h2 className="text-base font-bold text-slate-800">Análise Detalhada</h2>
-             </div>
-             <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                <ResultsTable data={data} />
-             </div>
-          </section>
+          {/* TAB NAVIGATION */}
+          <div className="flex gap-2 border-b border-gray-200 pb-1">
+            <button
+              onClick={() => setActiveTab('growth')}
+              className={`px-4 py-2 text-sm font-bold rounded-t-lg transition-colors flex items-center gap-2 ${
+                activeTab === 'growth' 
+                ? 'bg-white text-teal-700 border-t border-x border-gray-200 -mb-[5px] shadow-sm' 
+                : 'text-slate-500 hover:text-slate-700 hover:bg-gray-50'
+              }`}
+            >
+              <ChartPieIcon className="w-4 h-4" />
+              Crescimento & Desenvolvimento
+            </button>
+            <button
+              onClick={() => setActiveTab('vaccines')}
+              className={`px-4 py-2 text-sm font-bold rounded-t-lg transition-colors flex items-center gap-2 ${
+                activeTab === 'vaccines' 
+                ? 'bg-white text-blue-700 border-t border-x border-gray-200 -mb-[5px] shadow-sm' 
+                : 'text-slate-500 hover:text-slate-700 hover:bg-gray-50'
+              }`}
+            >
+              <BeakerIcon className="w-4 h-4" />
+              Carteira de Vacinação (Status)
+            </button>
+          </div>
 
-          {/* 2. Gráficos */}
-          <section>
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-3 gap-2">
-               <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
-                 <ChartPieIcon className="w-5 h-5 text-teal-600" />
-                 Curvas de Crescimento (OMS)
-               </h2>
-               
-               {dbStatus === 'offline' && (
-                 <span className="text-[10px] text-orange-600 bg-orange-50 px-2 py-0.5 rounded border border-orange-200 font-medium">
-                   Modo Demonstração
-                 </span>
-               )}
-            </div>
-            
-            <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
-              {/* Controles do Gráfico */}
-              <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3 mb-4 pb-3 border-b border-gray-100">
-                <div className="flex bg-slate-100 p-0.5 rounded-md overflow-x-auto max-w-full">
-                  {chartOptions.map(opt => (
-                    <button
-                      key={opt.id}
-                      onClick={() => setActiveMeasure(opt.id as any)}
-                      className={`px-3 py-1 rounded-[4px] text-xs font-semibold transition-all whitespace-nowrap ${
-                        activeMeasure === opt.id 
-                        ? 'bg-white text-teal-700 shadow-sm ring-1 ring-black/5' 
-                        : 'text-slate-500 hover:text-slate-700'
-                      }`}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
+          {activeTab === 'growth' ? (
+            <div className="space-y-4">
+              {/* 1. Tabela de Resultados e Análise */}
+              <section>
+                <div className="flex items-center gap-2 mb-2">
+                  <TableCellsIcon className="w-5 h-5 text-teal-600" />
+                  <h2 className="text-base font-bold text-slate-800">Análise Detalhada</h2>
                 </div>
-
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1">
-                    <ClockIcon className="w-3 h-3" /> Período:
-                  </span>
-                  {timeRangeOptions.map((opt) => (
-                    <button
-                      key={opt.label}
-                      onClick={() => setTimeRange(opt.days)}
-                      className={`px-2 py-0.5 rounded text-[10px] font-medium border transition-colors ${
-                        timeRange === opt.days
-                        ? 'bg-indigo-50 border-indigo-200 text-indigo-700'
-                        : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'
-                      }`}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                    <ResultsTable data={data} />
                 </div>
-              </div>
+              </section>
 
-              <div className="h-[400px]">
-                <GrowthChart 
-                   birthDate={data.birthDate}
-                   sex={data.sex}
-                   consultations={chartConsultations}
-                   measure={activeMeasure}
-                   maxAgeDays={timeRange}
-                />
-              </div>
+              {/* 2. Gráficos */}
+              <section>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-3 gap-2">
+                  <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                    <ChartPieIcon className="w-5 h-5 text-teal-600" />
+                    Curvas de Crescimento (OMS)
+                  </h2>
+                  
+                  {dbStatus === 'offline' && (
+                    <span className="text-[10px] text-orange-600 bg-orange-50 px-2 py-0.5 rounded border border-orange-200 font-medium">
+                      Modo Demonstração
+                    </span>
+                  )}
+                </div>
+                
+                <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+                  {/* Controles do Gráfico */}
+                  <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3 mb-4 pb-3 border-b border-gray-100">
+                    <div className="flex bg-slate-100 p-0.5 rounded-md overflow-x-auto max-w-full">
+                      {chartOptions.map(opt => (
+                        <button
+                          key={opt.id}
+                          onClick={() => setActiveMeasure(opt.id as any)}
+                          className={`px-3 py-1 rounded-[4px] text-xs font-semibold transition-all whitespace-nowrap ${
+                            activeMeasure === opt.id 
+                            ? 'bg-white text-teal-700 shadow-sm ring-1 ring-black/5' 
+                            : 'text-slate-500 hover:text-slate-700'
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1">
+                        <ClockIcon className="w-3 h-3" /> Período:
+                      </span>
+                      {timeRangeOptions.map((opt) => (
+                        <button
+                          key={opt.label}
+                          onClick={() => setTimeRange(opt.days)}
+                          className={`px-2 py-0.5 rounded text-[10px] font-medium border transition-colors ${
+                            timeRange === opt.days
+                            ? 'bg-indigo-50 border-indigo-200 text-indigo-700'
+                            : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="h-[400px]">
+                    <GrowthChart 
+                      birthDate={data.birthDate}
+                      sex={data.sex}
+                      consultations={chartConsultations}
+                      measure={activeMeasure}
+                      maxAgeDays={timeRange}
+                    />
+                  </div>
+                </div>
+              </section>
             </div>
-          </section>
+          ) : (
+            <div className="bg-white p-4 rounded-b-xl rounded-tr-xl shadow-sm border border-gray-200 min-h-[600px]">
+               <div className="mb-4 flex items-center gap-2 bg-blue-50 text-blue-800 p-3 rounded-lg text-sm border border-blue-100">
+                  <BeakerIcon className="w-5 h-5" />
+                  <p>
+                    Este painel exibe o status vacinal calculado <strong>com base na idade do paciente</strong>. 
+                    Ele não substitui a verificação física da caderneta.
+                  </p>
+               </div>
+               <VaccinationCard birthDate={data.birthDate} />
+            </div>
+          )}
+
         </div>
       </main>
     </div>
