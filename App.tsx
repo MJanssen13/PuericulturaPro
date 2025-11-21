@@ -15,7 +15,7 @@ import {
   ClockIcon,
   ClipboardDocumentListIcon,
   TableCellsIcon,
-  BeakerIcon
+  EyeDropperIcon
 } from '@heroicons/react/24/outline';
 
 function App() {
@@ -210,7 +210,7 @@ function App() {
                 : 'text-slate-500 hover:text-slate-700 hover:bg-gray-50'
               }`}
             >
-              <BeakerIcon className="w-4 h-4" />
+              <EyeDropperIcon className="w-4 h-4" />
               Carteira de Vacinação (Status)
             </button>
           </div>
@@ -297,7 +297,7 @@ function App() {
           ) : (
             <div className="bg-white p-4 rounded-b-xl rounded-tr-xl shadow-sm border border-gray-200 min-h-[600px]">
                <div className="mb-4 flex items-center gap-2 bg-blue-50 text-blue-800 p-3 rounded-lg text-sm border border-blue-100">
-                  <BeakerIcon className="w-5 h-5" />
+                  <EyeDropperIcon className="w-5 h-5" />
                   <p>
                     Este painel exibe o status vacinal calculado <strong>com base na idade do paciente</strong>. 
                     Ele não substitui a verificação física da caderneta.

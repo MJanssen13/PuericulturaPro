@@ -1,3 +1,5 @@
+
+
 import React, { useState } from 'react';
 import { getVaccineStatus, VaccineStatus } from '../services/vaccineLogic';
 import { ExclamationTriangleIcon, CheckBadgeIcon, ClockIcon, CheckCircleIcon } from '@heroicons/react/24/solid';
@@ -38,101 +40,84 @@ export const VaccinationCard: React.FC<Props> = ({ birthDate, patientName }) => 
     brown: '#d6d3d1', // Hep A
   };
 
-  const renderCell = (ruleId: string, bgColor: string, heightClass = "h-24") => {
+  const renderCell = (ruleId: string, bgColor: string) => {
     const data = getVaccineStatus(ruleId, birthDate);
     const isApplied = appliedVaccines[ruleId];
     
-    let content = null;
+    let statusContent = null;
     let containerClass = "bg-white/50"; // Default background
 
     // Logic for Status Appearance
     if (isApplied) {
-        // CHECKED -> GREEN
         containerClass = "bg-emerald-100";
-        content = (
-            <div className="flex flex-col items-center justify-center h-full text-center p-1 w-full">
+        statusContent = (
+            <div className="flex flex-col items-center justify-center text-center">
                 <CheckCircleIcon className="w-6 h-6 text-emerald-600 mb-1" />
                 <span className="text-[10px] font-bold text-emerald-700 leading-tight uppercase">Aplicado</span>
             </div>
         );
     } else if (data.status === 'LATE') {
-        // LATE -> RED
         containerClass = "bg-red-100/90";
-        content = (
-            <div className="flex flex-col items-center justify-center h-full text-center p-1 w-full">
+        statusContent = (
+            <div className="flex flex-col items-center justify-center text-center">
                 <ExclamationTriangleIcon className="w-5 h-5 text-red-600 mb-1" />
-                <span className="text-[10px] font-bold text-red-700 leading-tight uppercase">Em Atraso</span>
-                <span className="text-[9px] font-medium text-red-600 leading-tight mt-0.5">{data.message}</span>
+                <span className="text-[10px] font-bold text-red-700 leading-tight uppercase">{data.message}</span>
             </div>
         );
     } else if (data.status === 'DUE') {
-        // DUE -> BLUE (Requested change)
         containerClass = "bg-blue-100/90";
-        content = (
-            <div className="flex flex-col items-center justify-center h-full text-center p-1 w-full animate-pulse">
+        statusContent = (
+            <div className="flex flex-col items-center justify-center text-center">
                 <CheckBadgeIcon className="w-5 h-5 text-blue-600 mb-1" />
-                <span className="text-[10px] font-bold text-blue-700 leading-tight uppercase">Aplicar Agora</span>
-                <span className="text-[9px] font-medium text-blue-600 leading-tight mt-0.5">Idade Ideal</span>
+                <span className="text-[10px] font-bold text-blue-700 leading-tight uppercase">{data.message}</span>
             </div>
         );
-    } else {
-        // FUTURE -> GRAY/DEFAULT
-        content = (
-            <div className="flex flex-col items-center justify-center h-full text-center p-1 opacity-60">
-                <ClockIcon className="w-4 h-4 text-slate-500 mb-1" />
-                <span className="text-[10px] font-bold text-slate-600 leading-tight uppercase">Aguardar</span>
-                <span className="text-[9px] font-medium text-slate-500 leading-tight mt-0.5">{data.message}</span>
+    } else { // FUTURE
+        const isUpcoming = data.message === "Próxima aplicação";
+        containerClass = isUpcoming ? "bg-amber-50" : "bg-gray-50";
+        statusContent = (
+            <div className="flex flex-col items-center justify-center text-center opacity-90">
+                <ClockIcon className={`w-4 h-4 mb-1 ${isUpcoming ? 'text-amber-600' : 'text-slate-500'}`} />
+                <span className={`text-[10px] font-bold leading-tight uppercase ${isUpcoming ? 'text-amber-700' : 'text-slate-600'}`}>
+                    {data.message}
+                </span>
             </div>
         );
     }
 
     return (
-        <div className={`relative flex flex-col ${heightClass} border border-slate-300 bg-white overflow-hidden group`}>
-             {/* Checkbox */}
-             <div className="absolute top-1 right-1 z-30">
+        <div className={`relative flex flex-col min-h-[7rem] border border-slate-300 bg-white overflow-hidden group`}>
+             {/* Header of the cell (Dose label + checkbox) */}
+             <div style={{ backgroundColor: bgColor }} className="z-10 py-1 px-2 flex justify-between items-center border-b border-slate-300 shadow-sm relative">
+                <span className="text-[10px] font-bold text-slate-800 whitespace-nowrap">{data.rule.doseLabel}</span>
                 <input 
                     type="checkbox"
                     checked={!!isApplied}
                     onChange={() => toggleVaccine(ruleId)}
-                    className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer shadow-sm bg-white/80 backdrop-blur-sm"
+                    className="h-4 w-4 rounded border-gray-400/50 text-emerald-600 focus:ring-emerald-500 cursor-pointer shadow-sm bg-white/50"
                 />
              </div>
 
-             {/* Imitate the paper fields lines (Hidden if applied to look cleaner) */}
-             <div className={`absolute inset-0 flex flex-col pointer-events-none z-0 opacity-20 ${isApplied ? 'hidden' : ''}`}>
-                <div className="flex-1 border-b border-slate-400"></div>
-                <div className="flex-1 border-b border-slate-400"></div>
-                <div className="flex-1 border-b border-slate-400"></div>
-                <div className="flex-1"></div>
-             </div>
-             
-             {/* Header of the cell (Dose label) */}
-             <div style={{ backgroundColor: bgColor }} className="z-10 py-1 px-1 text-[10px] font-bold text-slate-800 text-center border-b border-slate-300 shadow-sm relative">
-                {data.rule.doseLabel}
-             </div>
-
-             {/* Status Content overlay */}
-             <div className={`flex-1 z-10 flex items-center justify-center p-1 transition-colors duration-300 ${containerClass}`}>
-                 {content}
+             {/* Main container with status color */}
+             <div className={`flex-1 z-10 flex flex-col justify-between p-0 transition-colors duration-300 ${containerClass}`}>
+                 {/* Status Content */}
+                 <div className="flex-1 flex items-center justify-center p-1">
+                    {statusContent}
+                 </div>
+                 {/* Momento Footer */}
+                 <div className="w-full text-center py-1 bg-black/5 border-t border-black/10">
+                    <p className="text-[9px] text-slate-800 font-medium leading-tight px-1">
+                        <span className="font-bold">Momento:</span> {data.rule.description || 'N/A'}
+                    </p>
+                 </div>
              </div>
         </div>
     );
   };
 
   return (
-    <div className="max-w-5xl mx-auto bg-white p-2 shadow-lg rounded-sm font-sans">
+    <div className="max-w-5xl mx-auto bg-white p-2 shadow-lg rounded-sm">
       
-      {/* Header */}
-      <div className="border-2 border-blue-900 mb-4">
-        <div className="bg-blue-100 p-2 border-b border-blue-900">
-           <h2 className="text-xl font-bold text-blue-900 uppercase">Registro da Aplicação das Vacinas do Calendário Nacional</h2>
-        </div>
-        <div className="p-2 flex gap-2 text-sm font-bold text-slate-700">
-           <span>NOME: <span className="font-normal text-slate-900">{patientName || '__________________________________________________'}</span></span>
-           <span className="ml-auto">Data de Nascimento: <span className="font-normal text-slate-900">{birthDate ? new Date(birthDate).toLocaleDateString('pt-BR') : '__/__/____'}</span></span>
-        </div>
-      </div>
-
       {/* =================================================================================
           GRID 1: 0 to 12 Months
       ================================================================================= */}
@@ -141,7 +126,7 @@ export const VaccinationCard: React.FC<Props> = ({ birthDate, patientName }) => 
          <div className="flex">
             {/* SIDEBAR LABEL */}
             <div className="w-8 bg-white border-r border-slate-800 flex items-center justify-center shrink-0">
-               <span className="text-xs font-bold text-slate-800 -rotate-90 whitespace-nowrap tracking-widest">Até 12 meses</span>
+               <span className="text-xs font-bold text-slate-800 -rotate-90 whitespace-nowrap tracking-widest uppercase">Até 12 meses</span>
             </div>
 
             {/* MAIN CONTENT */}
@@ -149,10 +134,10 @@ export const VaccinationCard: React.FC<Props> = ({ birthDate, patientName }) => 
                
                {/* ROW 1: BCG, HepB, Penta 1, Penta 2, Penta 3, Rota 1, Rota 2 */}
                <div className="grid grid-cols-7 text-[10px] font-bold text-center border-b border-slate-400">
-                  <div style={{backgroundColor: colors.bcgPurple}} className="py-1 border-r border-slate-400">BCG</div>
-                  <div style={{backgroundColor: colors.hepOrange}} className="py-1 border-r border-slate-400">Hepatite B</div>
-                  <div style={{backgroundColor: colors.pentaOrange}} className="col-span-3 py-1 border-r border-slate-400">Penta</div>
-                  <div style={{backgroundColor: colors.rotaPink}} className="col-span-2 py-1">Rotavírus humano</div>
+                  <div style={{backgroundColor: colors.bcgPurple}} className="py-1 px-1 border-r border-slate-400 uppercase tracking-wider">BCG</div>
+                  <div style={{backgroundColor: colors.hepOrange}} className="py-1 px-1 border-r border-slate-400 uppercase tracking-wider">Hepatite B</div>
+                  <div style={{backgroundColor: colors.pentaOrange}} className="col-span-3 py-1 px-1 border-r border-slate-400 uppercase tracking-wider">Penta</div>
+                  <div style={{backgroundColor: colors.rotaPink}} className="col-span-2 py-1 px-1 uppercase tracking-wider">Rotavírus humano</div>
                </div>
                <div className="grid grid-cols-7">
                   <div className="border-r border-slate-400">{renderCell('bcg', colors.bcgPurple)}</div>
@@ -167,9 +152,11 @@ export const VaccinationCard: React.FC<Props> = ({ birthDate, patientName }) => 
                {/* ROW 2: Pneumo 10V (1, 2), VIP (1, 2, 3), Men C (1, 2) */}
                <div className="border-t border-slate-400">
                   <div className="grid grid-cols-7 text-[10px] font-bold text-center border-b border-slate-400">
-                      <div style={{backgroundColor: colors.pneumoYellow}} className="col-span-2 py-1 border-r border-slate-400">Pneumocócica 10V (conjugada)</div>
-                      <div style={{backgroundColor: colors.vipCyan}} className="col-span-3 py-1 border-r border-slate-400">VIP</div>
-                      <div style={{backgroundColor: colors.menGreen}} className="col-span-2 py-1">Meningocócica C (conjugada)</div>
+                      <div style={{backgroundColor: colors.pneumoYellow}} className="col-span-2 py-1 px-1 border-r border-slate-400 uppercase tracking-wider flex items-center justify-center">
+                        <span>Pneumocócica 10V (conjugada)</span>
+                      </div>
+                      <div style={{backgroundColor: colors.vipCyan}} className="col-span-3 py-1 px-1 border-r border-slate-400 uppercase tracking-wider">VIP</div>
+                      <div style={{backgroundColor: colors.menGreen}} className="col-span-2 py-1 px-1 uppercase tracking-wider">Meningocócica C (conjugada)</div>
                   </div>
                   <div className="grid grid-cols-7">
                       <div className="border-r border-slate-400">{renderCell('pneumo_1', colors.pneumoYellow)}</div>
@@ -185,10 +172,10 @@ export const VaccinationCard: React.FC<Props> = ({ birthDate, patientName }) => 
                {/* ROW 3: Febre Amarela, Triplice Viral, Covid (1, 2, 3), Influenza (1, 2) */}
                <div className="border-t border-slate-400">
                    <div className="grid grid-cols-7 text-[10px] font-bold text-center border-b border-slate-400">
-                       <div style={{backgroundColor: colors.faTeal}} className="py-1 border-r border-slate-400">Febre amarela</div>
-                       <div style={{backgroundColor: colors.tripRed}} className="py-1 border-r border-slate-400">Tríplice viral</div>
-                       <div style={{backgroundColor: colors.covidMagenta}} className="col-span-3 py-1 border-r border-slate-400">Covid-19</div>
-                       <div style={{backgroundColor: colors.fluOrange}} className="col-span-2 py-1">Influenza trivalente</div>
+                       <div style={{backgroundColor: colors.faTeal}} className="py-1 px-1 border-r border-slate-400 uppercase tracking-wider">Febre amarela</div>
+                       <div style={{backgroundColor: colors.tripRed}} className="py-1 px-1 border-r border-slate-400 uppercase tracking-wider">Tríplice viral</div>
+                       <div style={{backgroundColor: colors.covidMagenta}} className="col-span-3 py-1 px-1 border-r border-slate-400 uppercase tracking-wider">Covid-19</div>
+                       <div style={{backgroundColor: colors.fluOrange}} className="col-span-2 py-1 px-1 uppercase tracking-wider">Influenza trivalente</div>
                    </div>
                    <div className="grid grid-cols-7">
                        <div className="border-r border-slate-400">{renderCell('febre_amarela_1', colors.faTeal)}</div>
@@ -215,7 +202,7 @@ export const VaccinationCard: React.FC<Props> = ({ birthDate, patientName }) => 
          <div className="flex">
              {/* SIDEBAR LABEL */}
              <div className="w-8 bg-white border-r border-slate-800 flex items-center justify-center shrink-0">
-               <span className="text-xs font-bold text-slate-800 -rotate-90 whitespace-nowrap tracking-widest">A partir de 12 meses</span>
+               <span className="text-xs font-bold text-slate-800 -rotate-90 whitespace-nowrap tracking-widest uppercase">A partir de 12 meses</span>
              </div>
 
              {/* MAIN CONTENT */}
@@ -223,11 +210,14 @@ export const VaccinationCard: React.FC<Props> = ({ birthDate, patientName }) => 
                  
                  {/* ROW 1: Pneumo Ref, Men C Ref, DTP (Ref 1, 2), VOP (Ref 1, 2), Tetraviral */}
                  <div className="grid grid-cols-7 text-[10px] font-bold text-center border-b border-slate-400">
-                      <div style={{backgroundColor: colors.pneumoYellow}} className="border-r border-slate-400 py-1">Pneumocócica 10V (conjugada)</div>
-                      <div style={{backgroundColor: colors.menGreen}} className="border-r border-slate-400 py-1">Meningocócica C (conjugada)</div>
-                      <div style={{backgroundColor: colors.pentaOrange}} className="col-span-2 border-r border-slate-400 py-1">DTP</div>
-                      <div style={{backgroundColor: colors.vipCyan}} className="col-span-2 border-r border-slate-400 py-1">VOP</div>
-                      <div style={{backgroundColor: colors.tripRed}} className="py-1">Tetraviral</div>
+                      <div style={{backgroundColor: colors.pneumoYellow}} className="border-r border-slate-400 py-1 px-1 uppercase tracking-wider flex flex-col justify-center">
+                        <span>Pneumocócica</span>
+                        <span>10V</span>
+                      </div>
+                      <div style={{backgroundColor: colors.menGreen}} className="border-r border-slate-400 py-1 px-1 uppercase tracking-wider">Meningocócica C (ACWY)</div>
+                      <div style={{backgroundColor: colors.pentaOrange}} className="col-span-2 border-r border-slate-400 py-1 px-1 uppercase tracking-wider">DTP</div>
+                      <div style={{backgroundColor: colors.vipCyan}} className="col-span-2 border-r border-slate-400 py-1 px-1 uppercase tracking-wider">VOP / VIP</div>
+                      <div style={{backgroundColor: colors.tripRed}} className="py-1 px-1 uppercase tracking-wider">Tetraviral</div>
                  </div>
                  <div className="grid grid-cols-7">
                       <div className="border-r border-slate-400">{renderCell('pneumo_ref', colors.pneumoYellow)}</div>
@@ -242,11 +232,14 @@ export const VaccinationCard: React.FC<Props> = ({ birthDate, patientName }) => 
                  {/* ROW 2: Varicela, Febre Amarela Ref, Hep A, HPV (2 doses), Pneumo 23V */}
                  <div className="border-t border-slate-400">
                      <div className="grid grid-cols-7 text-[10px] font-bold text-center border-b border-slate-400">
-                          <div style={{backgroundColor: colors.varicelaPink}} className="border-r border-slate-400 py-1">Varicela</div>
-                          <div style={{backgroundColor: colors.faTeal}} className="border-r border-slate-400 py-1">Febre amarela</div>
-                          <div style={{backgroundColor: colors.brown}} className="border-r border-slate-400 py-1">Hepatite A</div>
-                          <div style={{backgroundColor: colors.hpvPurple}} className="col-span-2 border-r border-slate-400 py-1">HPV</div>
-                          <div style={{backgroundColor: colors.pneumo23Orange}} className="border-r border-slate-400 py-1">Pneumocócica 23V (povos indígenas)</div>
+                          <div style={{backgroundColor: colors.varicelaPink}} className="border-r border-slate-400 py-1 px-1 uppercase tracking-wider">Varicela</div>
+                          <div style={{backgroundColor: colors.faTeal}} className="border-r border-slate-400 py-1 px-1 uppercase tracking-wider">Febre amarela</div>
+                          <div style={{backgroundColor: colors.brown}} className="border-r border-slate-400 py-1 px-1 uppercase tracking-wider">Hepatite A</div>
+                          <div style={{backgroundColor: colors.hpvPurple}} className="col-span-2 border-r border-slate-400 py-1 px-1 uppercase tracking-wider">HPV</div>
+                          <div style={{backgroundColor: colors.pneumo23Orange}} className="border-r border-slate-400 py-1 px-1 uppercase tracking-wider flex flex-col justify-center leading-tight">
+                            <span>Pneumocócica</span>
+                            <span>23V (indígenas)</span>
+                          </div>
                           <div className="py-1 bg-white"></div>
                      </div>
                      <div className="grid grid-cols-7">
@@ -256,20 +249,12 @@ export const VaccinationCard: React.FC<Props> = ({ birthDate, patientName }) => 
                           <div className="border-r border-slate-400">{renderCell('hpv_1', colors.hpvPurple)}</div>
                           <div className="border-r border-slate-400">{renderCell('hpv_2', colors.hpvPurple)}</div>
                           <div className="border-r border-slate-400">{renderCell('pneumo_23', colors.pneumo23Orange)}</div>
-                          <div className="flex items-center justify-center p-2 text-center text-[9px] text-slate-500 font-handwriting">
-                              Proteja a criança.<br/>Mantenha a vacinação atualizada.
-                          </div>
+                          <div></div>
                      </div>
                  </div>
 
              </div>
          </div>
-      </div>
-
-      {/* Footer Image / Message */}
-      <div className="mt-4 bg-gradient-to-r from-yellow-400 via-green-500 to-blue-600 p-4 rounded text-white text-center shadow-md">
-         <h3 className="text-lg font-bold uppercase text-white drop-shadow-md">Movimento Nacional Pela Vacinação</h3>
-         <p className="text-sm font-medium text-white/90">Vacina é vida. Vacina é para todos.</p>
       </div>
 
     </div>
