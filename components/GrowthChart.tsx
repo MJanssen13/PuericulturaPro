@@ -91,14 +91,22 @@ export const GrowthChart: React.FC<Props> = ({
     const range_green = isBMI ? [point.z_neg_2, point.z_pos_1] : [point.z_neg_2, point.z_pos_2];
     const range_yellow_pos = isBMI ? [point.z_pos_1, point.z_pos_3] : [point.z_pos_2, point.z_pos_3];
 
+    // Extrapolate Z+/-4 for Intergrowth charts to ensure red areas are drawn
+    const z_pos_4_val = (point.z_pos_4 === null || point.z_pos_4 === undefined || point.z_pos_4 === 0) 
+      ? (point.z_pos_3 + (point.z_pos_3 - point.z_pos_2)) 
+      : point.z_pos_4;
+    const z_neg_4_val = (point.z_neg_4 === null || point.z_neg_4 === undefined || point.z_neg_4 === 0)
+      ? (point.z_neg_3 - (point.z_neg_2 - point.z_neg_3))
+      : point.z_neg_4;
+
     return {
       day: point.age_days, z_neg_4: point.z_neg_4, z_neg_3: point.z_neg_3, z_neg_2: point.z_neg_2,
       z_neg_1: point.z_neg_1, z_0: point.z_0, z_pos_1: point.z_pos_1, z_pos_2: point.z_pos_2,
       z_pos_3: point.z_pos_3, z_pos_4: point.z_pos_4,
-      range_red_neg: [point.z_neg_4, point.z_neg_3],
+      range_red_neg: [z_neg_4_val, point.z_neg_3],
       range_yellow_neg: [point.z_neg_3, point.z_neg_2],
       range_green, range_yellow_pos,
-      range_red_pos: [point.z_pos_3, point.z_pos_4],
+      range_red_pos: [point.z_pos_3, z_pos_4_val],
     };
   };
 
@@ -253,7 +261,9 @@ export const GrowthChart: React.FC<Props> = ({
 
           <Line type="monotone" dataKey="z_pos_3" stroke={getLineColor('pos_3')} strokeWidth={1.5} dot={false} isAnimationActive={false} name="z_pos_3" />
           <Line type="monotone" dataKey="z_pos_2" stroke={getLineColor('pos_2')} strokeWidth={2} dot={false} isAnimationActive={false} name="z_pos_2" />
+          <Line type="monotone" dataKey="z_pos_1" stroke={getLineColor('pos_1')} strokeWidth={1.5} strokeDasharray="3 3" dot={false} isAnimationActive={false} name="z_pos_1" />
           <Line type="monotone" dataKey="z_0" stroke="#15803d" strokeWidth={2} dot={false} isAnimationActive={false} name="z_0" />
+          <Line type="monotone" dataKey="z_neg_1" stroke={getLineColor('neg_1')} strokeWidth={1.5} strokeDasharray="3 3" dot={false} isAnimationActive={false} name="z_neg_1" />
           <Line type="monotone" dataKey="z_neg_2" stroke={getLineColor('neg_2')} strokeWidth={2} dot={false} isAnimationActive={false} name="z_neg_2" />
           <Line type="monotone" dataKey="z_neg_3" stroke={getLineColor('neg_3')} strokeWidth={1.5} dot={false} isAnimationActive={false} name="z_neg_3" />
           

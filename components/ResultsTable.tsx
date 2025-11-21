@@ -9,7 +9,7 @@ import {
   evaluateZScore, 
   formatAgeString,
   getBMIDiagnosis,
-  getRawReference
+  getCephalicDiagnosis
 } from '../services/puericulturaLogic';
 import { ArrowTrendingUpIcon, ArrowTrendingDownIcon, MinusIcon } from '@heroicons/react/24/outline';
 
@@ -96,34 +96,25 @@ export const ResultsTable: React.FC<Props> = ({ data }) => {
         hStatus = hText.includes('Adequado') ? 'good' : (hText.includes('Abaixo') || hText.includes('Acima') ? 'warning' : 'neutral');
       }
 
-      const prevRefC = await getRawReference(birthDate, data.prev.date, sex, 'cephalic', isPremature, gestationalAgeWeeks, gestationalAgeDays);
-      const currRefC = await getRawReference(birthDate, data.curr.date, sex, 'cephalic', isPremature, gestationalAgeWeeks, gestationalAgeDays);
+      const prevPCDiag = getCephalicDiagnosis(pC);
+      const currPCDiag = getCephalicDiagnosis(cC);
+      const isNormocefalia = (d: string) => d.includes('Normocefalia');
+      const pcBlockStatus = (isNormocefalia(prevPCDiag) && isNormocefalia(currPCDiag)) ? 'good' : 'warning';
       
-      const getPCStatusText = (val: number | '', ref: any) => {
-          if (!val || !ref) return { statusText: 'N/A', rangeText: '-', isGood: false };
-          const min = ref.z_neg_2;
-          const max = ref.z_pos_2;
-          const valNum = Number(val);
-          const isGood = valNum >= min && valNum <= max;
-          const statusText = isGood ? 'Adequado' : (valNum < min ? 'Baixo' : 'Alto');
-          const rangeText = `${min.toFixed(1).replace('.',',')}-${max.toFixed(1).replace('.',',')} cm`;
-          return { statusText, rangeText, isGood };
-      };
-
-      const prevPCSt = getPCStatusText(data.prev.cephalic, prevRefC);
-      const currPCSt = getPCStatusText(data.curr.cephalic, currRefC);
-      const pcBlockStatus = (prevPCSt.isGood && currPCSt.isGood) ? 'good' : 'warning';
-      
-      const getColor = (isGood: boolean, valStr: string) => valStr === 'N/A' ? 'text-slate-400' : isGood ? 'text-emerald-600' : 'text-amber-600';
+      const getColor = (diag: string) => {
+          if (diag === 'Normocefalia') return 'text-emerald-600';
+          if (diag === '') return 'text-slate-400';
+          return 'text-amber-600';
+      }
 
       const pcText = (
         <div className="flex flex-col gap-1">
-          <span className={`${getColor(currPCSt.isGood, currPCSt.statusText)} text-sm`}>
-             <span className="font-bold text-slate-600">Atual:</span> <span className="font-semibold text-sm">{currPCSt.statusText}</span> <span className="text-slate-500 font-normal ml-1">(Faixa: {currPCSt.rangeText})</span>
+          <span className={`${getColor(currPCDiag)} text-sm`}>
+             <span className="font-bold text-slate-600">Atual:</span> <span className="font-semibold text-sm">{currPCDiag || '-'}</span>
           </span>
           {!data.isFirstConsultation && (
-            <span className={`${getColor(prevPCSt.isGood, prevPCSt.statusText)} text-sm`}>
-               <span className="font-bold text-slate-600">Anterior:</span> <span className="font-semibold text-sm">{prevPCSt.statusText}</span> <span className="text-slate-500 font-normal ml-1">(Faixa: {prevPCSt.rangeText})</span>
+            <span className={`${getColor(prevPCDiag)} text-sm`}>
+               <span className="font-bold text-slate-600">Anterior:</span> <span className="font-semibold text-sm">{prevPCDiag || '-'}</span>
             </span>
           )}
         </div>
@@ -190,8 +181,8 @@ export const ResultsTable: React.FC<Props> = ({ data }) => {
 
   const getZBadgeClass = (z: string) => {
     if (!z || z === "N/A") return "bg-slate-100 text-slate-400";
-    if (z.includes("Adequado") || z.includes("Eutrofia") || z.includes("Entre -1 e 0") || z.includes("Entre 0 e +1")) return "bg-emerald-100 text-emerald-700 border border-emerald-200";
-    if (z.includes("Risco") || z.includes("Sobrepeso") || z.includes("Entre +1 e +2") || z.includes("Entre -2 e -1")) return "bg-amber-100 text-amber-700 border border-amber-200";
+    if (z.includes("Adequado") || z.includes("Eutrofia") || z.includes("Normocefalia") || z.includes("Entre -1 e 0") || z.includes("Entre 0 e +1") || z.includes("Entre -2 e -1") || z.includes("Entre +1 e +2")) return "bg-emerald-100 text-emerald-700 border border-emerald-200";
+    if (z.includes("Risco") || z.includes("Sobrepeso")) return "bg-amber-100 text-amber-700 border border-amber-200";
     return "bg-rose-100 text-rose-700 border border-rose-200";
   };
 

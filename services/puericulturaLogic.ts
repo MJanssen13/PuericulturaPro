@@ -205,6 +205,23 @@ export function getBMIDiagnosis(zScore: string): string {
   return "";
 }
 
+export function getCephalicDiagnosis(zScore: string): string {
+  if (!zScore || zScore === 'N/A') return "";
+  
+  if (zScore.includes("> +3") || zScore.includes("Entre +2 e +3")) return "Macrocefalia";
+  if (zScore.includes("< -3") || zScore.includes("Entre -3 e -2")) return "Microcefalia";
+  
+  // All other cases between -2 and +2 are considered normal.
+  if (zScore.includes("Entre -2 e -1") || 
+      zScore.includes("Entre -1 e 0") || 
+      zScore.includes("Entre 0 e +1") || 
+      zScore.includes("Entre +1 e +2")) {
+    return "Normocefalia";
+  }
+  
+  return "";
+}
+
 // ================================================================
 // Z-SCORE EVALUATION
 // ================================================================
