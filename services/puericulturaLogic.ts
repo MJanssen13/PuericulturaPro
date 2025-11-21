@@ -211,21 +211,45 @@ export async function generateSummary(
   birthDate: string,
   sex: Sex,
   prev: { date: string, weight: number, height: number, cephalic: number, bmi: number },
-  curr: { date: string, weight: number, height: number, cephalic: number, bmi: number }
+  curr: { date: string, weight: number, height: number, cephalic: number, bmi: number },
+  isFirstConsultation: boolean = false
 ): Promise<string> {
   
   const dataAtualF = formatDate(curr.date);
-  const dataAntF = prev.date ? formatDate(prev.date) : "N/A";
-
+  
   // Helper to get Z-score text safely
   const getZ = async (date: string, val: number, type: 'weight'|'height'|'cephalic'|'bmi') => {
      if (!date || !val) return "N/A";
      return await evaluateZScore(birthDate, date, val, sex, type);
   };
 
+  // Current Z-scores (calculated for both cases)
+  const pZ_at = await getZ(curr.date, curr.weight, 'weight');
+  const aZ_at = await getZ(curr.date, curr.height, 'height');
+  const cZ_at = await getZ(curr.date, curr.cephalic, 'cephalic');
+  const iZ_at = await getZ(curr.date, curr.bmi, 'bmi');
+  const bmiAt = curr.bmi ? curr.bmi.toFixed(2).replace('.', ',') : 'N/A';
+
+  // === FIRST CONSULTATION FORMAT ===
+  if (isFirstConsultation) {
+    const linhaPeso = `Peso: ${curr.weight}g (Z: ${pZ_at})`;
+    const linhaAltura = `Altura: ${curr.height}cm (Z: ${aZ_at})`;
+    const linhaCeph = `C. Cefálico: ${curr.cephalic}cm (Z: ${cZ_at})`;
+    const linhaIMC = `IMC: ${bmiAt} (Z: ${iZ_at})`;
+
+    return `Dados Antropométricos:
+Data: ${dataAtualF}
+${linhaPeso}
+${linhaAltura}
+${linhaCeph}
+${linhaIMC}`;
+  }
+
+  // === STANDARD FOLLOW-UP FORMAT ===
+  const dataAntF = prev.date ? formatDate(prev.date) : "N/A";
+
   // 1. Weight
   const pZ_uc = await getZ(prev.date, prev.weight, 'weight');
-  const pZ_at = await getZ(curr.date, curr.weight, 'weight');
   const deltaPeso = (curr.weight && prev.weight) ? (curr.weight - prev.weight) : 0;
   const deltaPesoSign = deltaPeso > 0 ? '+' : '';
   const ganhoPeso = evaluateWeightGain(birthDate, prev.date, prev.weight, curr.date, curr.weight);
@@ -234,7 +258,6 @@ export async function generateSummary(
 
   // 2. Height
   const aZ_uc = await getZ(prev.date, prev.height, 'height');
-  const aZ_at = await getZ(curr.date, curr.height, 'height');
   const deltaAlt = (curr.height && prev.height) ? (curr.height - prev.height).toFixed(1).replace('.', ',') : 0;
   const ganhoAlt = evaluateHeightGrowth(birthDate, prev.date, prev.height, curr.date, curr.height);
 
@@ -242,14 +265,11 @@ export async function generateSummary(
 
   // 3. Cephalic
   const cZ_uc = await getZ(prev.date, prev.cephalic, 'cephalic');
-  const cZ_at = await getZ(curr.date, curr.cephalic, 'cephalic');
   const linhaCeph = `C. Cefálico: UC: ${prev.cephalic}cm (Z: ${cZ_uc}). Atual: ${curr.cephalic}cm (Z: ${cZ_at})`;
 
   // 4. BMI
   const iZ_uc = await getZ(prev.date, prev.bmi, 'bmi');
-  const iZ_at = await getZ(curr.date, curr.bmi, 'bmi');
   const bmiUC = prev.bmi ? prev.bmi.toFixed(2).replace('.', ',') : 'N/A';
-  const bmiAt = curr.bmi ? curr.bmi.toFixed(2).replace('.', ',') : 'N/A';
 
   const linhaIMC = `IMC: UC: ${bmiUC} (Z: ${iZ_uc}). Atual: ${bmiAt} (Z: ${iZ_at})`;
 

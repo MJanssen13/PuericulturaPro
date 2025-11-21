@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { AssessmentData, Consultation } from './types';
 import { AssessmentForm } from './components/AssessmentForm';
@@ -54,7 +55,8 @@ function App() {
          data.birthDate, 
          data.sex, 
          { ...data.prev, weight: Number(data.prev.weight), height: Number(data.prev.height), cephalic: Number(data.prev.cephalic), bmi: prevBMI },
-         { ...data.curr, weight: Number(data.curr.weight), height: Number(data.curr.height), cephalic: Number(data.curr.cephalic), bmi: currBMI }
+         { ...data.curr, weight: Number(data.curr.weight), height: Number(data.curr.height), cephalic: Number(data.curr.cephalic), bmi: currBMI },
+         data.isFirstConsultation
        );
        setSummary(text);
     };
