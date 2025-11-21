@@ -1,4 +1,3 @@
-
 import { Sex, ReferenceDataPoint } from '../types';
 import { getReferenceTable, getInterpolatedReference } from './referenceData';
 
@@ -14,7 +13,38 @@ export function calculateAgeInDays(birthDate: string, consultationDate: string):
   return Math.floor(diffTime / (1000 * 60 * 60 * 24));
 }
 
+export function calculatePostConceptualAgeDays(birthDate: string, consultationDate: string, gestationalAgeWeeks: number, gestationalAgeDays: number): number {
+  if (!birthDate || !consultationDate || !gestationalAgeWeeks || gestationalAgeWeeks <= 0) return 0;
+  const chronologicalAgeDays = calculateAgeInDays(birthDate, consultationDate);
+  const totalGestationalAgeDays = (gestationalAgeWeeks * 7) + (gestationalAgeDays || 0);
+  return totalGestationalAgeDays + chronologicalAgeDays;
+}
+
+export function calculateCorrectedAgeDays(birthDate: string, consultationDate: string, gestationalAgeWeeks: number, gestationalAgeDays: number): number {
+    const gestAgeInWeeks = (gestationalAgeWeeks || 0) + ((gestationalAgeDays || 0) / 7);
+    // Babies born at >= 37 weeks are considered term, so no correction needed.
+    if (!birthDate || !consultationDate || !gestationalAgeWeeks || gestAgeInWeeks >= 37) {
+        return calculateAgeInDays(birthDate, consultationDate);
+    }
+
+    const chronologicalAge = calculateAgeInDays(birthDate, consultationDate);
+    
+    // Total days of a 40-week term
+    const termDays = 40 * 7;
+    // Total days of baby's gestation
+    const gestationDays = (gestationalAgeWeeks * 7) + (gestationalAgeDays || 0);
+
+    // The correction factor is the difference
+    const daysToCorrect = termDays - gestationDays;
+    
+    const correctedAge = chronologicalAge - daysToCorrect;
+    
+    // Corrected age cannot be negative.
+    return Math.max(0, correctedAge);
+}
+
 export function formatAgeString(days: number): string {
+  if (days < 0) return 'Data inválida';
   if (days < 30) return `${days} dias`;
   const months = Math.floor(days / 30.44);
   const remainingDays = Math.floor(days % 30.44);
@@ -25,6 +55,19 @@ export function formatAgeString(days: number): string {
   }
   return `${months} meses e ${remainingDays} dias`;
 }
+
+export function getPrematurityClassification(weeks: number | string | undefined | ''): string {
+    const weeksNum = Number(weeks);
+    if (!weeksNum || weeksNum <= 0 || weeksNum >= 37) return '';
+
+    if (weeksNum <= 27) return 'Pré-termo extremo';
+    if (weeksNum >= 28 && weeksNum <= 31) return 'Muito prematuro';
+    if (weeksNum >= 32 && weeksNum <= 33) return 'Pré-termo moderado';
+    if (weeksNum >= 34 && weeksNum <= 36) return 'Pré-termo tardio';
+    
+    return '';
+}
+
 
 function formatDate(dateStr: string): string {
   if (!dateStr) return "";
@@ -41,7 +84,8 @@ function formatDate(dateStr: string): string {
 // ================================================================
 // VELOCITY FUNCTIONS
 // ================================================================
-
+// These functions are based on chronological age and are generally applicable for follow-up.
+// No changes needed for prematurity as they compare two points in time.
 export function evaluateWeightGain(
   birthDate: string,
   prevDate: string,
@@ -170,17 +214,18 @@ export async function evaluateZScore(
   currDate: string,
   value: number,
   sex: Sex,
-  measure: 'weight' | 'height' | 'bmi' | 'cephalic'
+  measure: 'weight' | 'height' | 'bmi' | 'cephalic',
+  isPremature?: boolean,
+  gestationalAgeWeeks?: number | '',
+  gestationalAgeDays?: number | ''
 ): Promise<string> {
   if (!value || isNaN(value) || !birthDate || !currDate) return "";
   
-  const ageDays = calculateAgeInDays(birthDate, currDate);
-  const table = await getReferenceTable(measure, sex);
-  const ref = getInterpolatedReference(table, ageDays);
+  const ref = await getRawReference(birthDate, currDate, sex, measure, isPremature, gestationalAgeWeeks, gestationalAgeDays);
 
   if (!ref) return "N/A";
 
-  // Lógica de Classificação baseada nas faixas Z (Padronizada para todos os indicadores)
+  // Lógica de Classificação (funciona para OMS e Intergrowth)
   if (value < ref.z_neg_3) return "< -3 (Muito Baixo)";
   if (value < ref.z_neg_2) return "Entre -3 e -2";
   if (value < ref.z_neg_1) return "Entre -2 e -1";
@@ -191,15 +236,41 @@ export async function evaluateZScore(
   return "> +3";
 }
 
-// NEW: Get raw reference object for detailed range analysis
 export async function getRawReference(
   birthDate: string,
   date: string,
   sex: Sex,
-  measure: 'weight' | 'height' | 'cephalic' | 'bmi'
+  measure: 'weight' | 'height' | 'cephalic' | 'bmi',
+  isPremature?: boolean,
+  gestationalAgeWeeks?: number | '',
+  gestationalAgeDays?: number | ''
 ): Promise<ReferenceDataPoint | null> {
+  const gestAgeWeeksNum = Number(gestationalAgeWeeks);
+  const gestAgeDaysNum = Number(gestationalAgeDays);
+  const PRETERM_CHART_PCA_LIMIT_DAYS = 40 * 7; // 40 weeks
+
+  if (isPremature && gestAgeWeeksNum > 0) {
+    const pcaDays = calculatePostConceptualAgeDays(birthDate, date, gestAgeWeeksNum, gestAgeDaysNum);
+    
+    // Se prematuro e dentro da janela de idade do INTERGROWTH, usa a curva de prematuro
+    if (pcaDays > 0 && pcaDays <= PRETERM_CHART_PCA_LIMIT_DAYS) {
+      // IMC não é aplicável para Intergrowth
+      if (measure === 'bmi') return null;
+
+      const measureToFetch = `preterm_${measure}` as any;
+      const { data: table } = await getReferenceTable(measureToFetch, sex); 
+      return getInterpolatedReference(table, pcaDays);
+    } else {
+       // Após o limite do Intergrowth, usa a idade corrigida na curva da OMS
+       const correctedAge = calculateCorrectedAgeDays(birthDate, date, gestAgeWeeksNum, gestAgeDaysNum);
+       const { data: table } = await getReferenceTable(measure, sex);
+       return getInterpolatedReference(table, correctedAge);
+    }
+  }
+  
+  // Curvas da OMS para bebês a termo (usa idade cronológica)
   const ageDays = calculateAgeInDays(birthDate, date);
-  const table = await getReferenceTable(measure, sex);
+  const { data: table } = await getReferenceTable(measure, sex);
   return getInterpolatedReference(table, ageDays);
 }
 
@@ -212,43 +283,36 @@ export async function generateSummary(
   sex: Sex,
   prev: { date: string, weight: number, height: number, cephalic: number, bmi: number },
   curr: { date: string, weight: number, height: number, cephalic: number, bmi: number },
-  isFirstConsultation: boolean = false
+  isFirstConsultation: boolean = false,
+  isPremature?: boolean,
+  gestationalAgeWeeks?: number | '',
+  gestationalAgeDays?: number | ''
 ): Promise<string> {
   
   const dataAtualF = formatDate(curr.date);
   
-  // Helper to get Z-score text safely
   const getZ = async (date: string, val: number, type: 'weight'|'height'|'cephalic'|'bmi') => {
      if (!date || !val) return "N/A";
-     return await evaluateZScore(birthDate, date, val, sex, type);
+     return await evaluateZScore(birthDate, date, val, sex, type, isPremature, gestationalAgeWeeks, gestationalAgeDays);
   };
 
-  // Current Z-scores (calculated for both cases)
   const pZ_at = await getZ(curr.date, curr.weight, 'weight');
   const aZ_at = await getZ(curr.date, curr.height, 'height');
   const cZ_at = await getZ(curr.date, curr.cephalic, 'cephalic');
   const iZ_at = await getZ(curr.date, curr.bmi, 'bmi');
   const bmiAt = curr.bmi ? curr.bmi.toFixed(2).replace('.', ',') : 'N/A';
 
-  // === FIRST CONSULTATION FORMAT ===
   if (isFirstConsultation) {
-    const linhaPeso = `Peso: ${curr.weight}g (Z: ${pZ_at})`;
-    const linhaAltura = `Altura: ${curr.height}cm (Z: ${aZ_at})`;
-    const linhaCeph = `C. Cefálico: ${curr.cephalic}cm (Z: ${cZ_at})`;
-    const linhaIMC = `IMC: ${bmiAt} (Z: ${iZ_at})`;
-
     return `Dados Antropométricos:
 Data: ${dataAtualF}
-${linhaPeso}
-${linhaAltura}
-${linhaCeph}
-${linhaIMC}`;
+Peso: ${curr.weight}g (Z: ${pZ_at})
+Altura: ${curr.height}cm (Z: ${aZ_at})
+C. Cefálico: ${curr.cephalic}cm (Z: ${cZ_at})
+IMC: ${bmiAt} (Z: ${iZ_at})`;
   }
 
-  // === STANDARD FOLLOW-UP FORMAT ===
   const dataAntF = prev.date ? formatDate(prev.date) : "N/A";
 
-  // 1. Weight
   const pZ_uc = await getZ(prev.date, prev.weight, 'weight');
   const deltaPeso = (curr.weight && prev.weight) ? (curr.weight - prev.weight) : 0;
   const deltaPesoSign = deltaPeso > 0 ? '+' : '';
@@ -256,18 +320,15 @@ ${linhaIMC}`;
   
   const linhaPeso = `Peso: UC: ${prev.weight}g (Z: ${pZ_uc}). Atual: ${curr.weight}g (Z: ${pZ_at}). ${deltaPesoSign}${deltaPeso}g (${ganhoPeso})`;
 
-  // 2. Height
   const aZ_uc = await getZ(prev.date, prev.height, 'height');
   const deltaAlt = (curr.height && prev.height) ? (curr.height - prev.height).toFixed(1).replace('.', ',') : 0;
   const ganhoAlt = evaluateHeightGrowth(birthDate, prev.date, prev.height, curr.date, curr.height);
 
   const linhaAltura = `Altura: UC: ${prev.height}cm (Z: ${aZ_uc}). Atual: ${curr.height}cm (Z: ${aZ_at}). +${deltaAlt}cm (${ganhoAlt})`;
 
-  // 3. Cephalic
   const cZ_uc = await getZ(prev.date, prev.cephalic, 'cephalic');
   const linhaCeph = `C. Cefálico: UC: ${prev.cephalic}cm (Z: ${cZ_uc}). Atual: ${curr.cephalic}cm (Z: ${cZ_at})`;
 
-  // 4. BMI
   const iZ_uc = await getZ(prev.date, prev.bmi, 'bmi');
   const bmiUC = prev.bmi ? prev.bmi.toFixed(2).replace('.', ',') : 'N/A';
 

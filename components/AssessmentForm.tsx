@@ -1,8 +1,7 @@
-
 import React, { useState, useEffect } from 'react';
 import { AssessmentData, Sex } from '../types';
-import { CalendarDaysIcon, UserIcon } from '@heroicons/react/24/outline';
-import { evaluateZScore, calculateAgeInDays, formatAgeString } from '../services/puericulturaLogic';
+import { CalendarDaysIcon, UserIcon, AcademicCapIcon } from '@heroicons/react/24/outline';
+import { evaluateZScore, calculateAgeInDays, formatAgeString, calculatePostConceptualAgeDays, calculateCorrectedAgeDays, getPrematurityClassification } from '../services/puericulturaLogic';
 
 interface Props {
   data: AssessmentData;
@@ -15,25 +14,32 @@ export const AssessmentForm: React.FC<Props> = ({ data, onChange }) => {
     prev: { weight: '', height: '', cephalic: '', bmi: '' },
     curr: { weight: '', height: '', cephalic: '', bmi: '' }
   });
+  
+  const [prematureAges, setPrematureAges] = useState({
+    prev: { postNatal: '', postConceptual: '', corrected: '' },
+    curr: { postNatal: '', postConceptual: '', corrected: '' }
+  });
 
   const prevAge = formatAgeString(calculateAgeInDays(data.birthDate, data.prev.date));
   const currAge = formatAgeString(calculateAgeInDays(data.birthDate, data.curr.date));
+  const prematurityClassification = getPrematurityClassification(data.gestationalAgeWeeks);
 
   useEffect(() => {
+    // Update Z-Scores
     const updateData = async () => {
         const calcBMI = (w: number | '', h: number | '') => (Number(w) && Number(h)) ? (Number(w) / 1000) / Math.pow(Number(h) / 100, 2) : 0;
         const prevBMI = calcBMI(data.prev.weight, data.prev.height);
         const currBMI = calcBMI(data.curr.weight, data.curr.height);
 
         const [pW, pH, pC, pB, cW, cH, cC, cB] = await Promise.all([
-            evaluateZScore(data.birthDate, data.prev.date, Number(data.prev.weight), data.sex, 'weight'),
-            evaluateZScore(data.birthDate, data.prev.date, Number(data.prev.height), data.sex, 'height'),
-            evaluateZScore(data.birthDate, data.prev.date, Number(data.prev.cephalic), data.sex, 'cephalic'),
-            evaluateZScore(data.birthDate, data.prev.date, prevBMI, data.sex, 'bmi'),
-            evaluateZScore(data.birthDate, data.curr.date, Number(data.curr.weight), data.sex, 'weight'),
-            evaluateZScore(data.birthDate, data.curr.date, Number(data.curr.height), data.sex, 'height'),
-            evaluateZScore(data.birthDate, data.curr.date, Number(data.curr.cephalic), data.sex, 'cephalic'),
-            evaluateZScore(data.birthDate, data.curr.date, currBMI, data.sex, 'bmi'),
+            evaluateZScore(data.birthDate, data.prev.date, Number(data.prev.weight), data.sex, 'weight', data.isPremature, data.gestationalAgeWeeks, data.gestationalAgeDays),
+            evaluateZScore(data.birthDate, data.prev.date, Number(data.prev.height), data.sex, 'height', data.isPremature, data.gestationalAgeWeeks, data.gestationalAgeDays),
+            evaluateZScore(data.birthDate, data.prev.date, Number(data.prev.cephalic), data.sex, 'cephalic', data.isPremature, data.gestationalAgeWeeks, data.gestationalAgeDays),
+            evaluateZScore(data.birthDate, data.prev.date, prevBMI, data.sex, 'bmi', data.isPremature, data.gestationalAgeWeeks, data.gestationalAgeDays),
+            evaluateZScore(data.birthDate, data.curr.date, Number(data.curr.weight), data.sex, 'weight', data.isPremature, data.gestationalAgeWeeks, data.gestationalAgeDays),
+            evaluateZScore(data.birthDate, data.curr.date, Number(data.curr.height), data.sex, 'height', data.isPremature, data.gestationalAgeWeeks, data.gestationalAgeDays),
+            evaluateZScore(data.birthDate, data.curr.date, Number(data.curr.cephalic), data.sex, 'cephalic', data.isPremature, data.gestationalAgeWeeks, data.gestationalAgeDays),
+            evaluateZScore(data.birthDate, data.curr.date, currBMI, data.sex, 'bmi', data.isPremature, data.gestationalAgeWeeks, data.gestationalAgeDays),
         ]);
 
         setZScores({
@@ -41,7 +47,39 @@ export const AssessmentForm: React.FC<Props> = ({ data, onChange }) => {
             curr: { weight: cW, height: cH, cephalic: cC, bmi: cB }
         });
     };
+    
+    // Update Premature Age Calculations for both dates
+    const updatePrematureAges = () => {
+       if (data.isPremature && data.birthDate && data.gestationalAgeWeeks) {
+          const formatPCADays = (days: number) => {
+              if (isNaN(days) || days <= 0) return '-';
+              const weeks = Math.floor(days / 7);
+              const remDays = days % 7;
+              return `${weeks}s ${remDays}d`;
+          };
+
+          const calculateAgesForDate = (consultationDate: string) => {
+             if (!consultationDate) return { postNatal: '-', postConceptual: '-', corrected: '-' };
+             const postNatalDays = calculateAgeInDays(data.birthDate, consultationDate);
+             const postConceptualDays = calculatePostConceptualAgeDays(data.birthDate, consultationDate, Number(data.gestationalAgeWeeks), Number(data.gestationalAgeDays));
+             const correctedDays = calculateCorrectedAgeDays(data.birthDate, consultationDate, Number(data.gestationalAgeWeeks), Number(data.gestationalAgeDays));
+             return {
+                postNatal: formatAgeString(postNatalDays),
+                postConceptual: formatPCADays(postConceptualDays),
+                corrected: formatAgeString(correctedDays),
+             };
+          };
+          
+          setPrematureAges({
+            prev: calculateAgesForDate(data.prev.date),
+            curr: calculateAgesForDate(data.curr.date),
+          });
+       }
+    };
+    
     updateData();
+    updatePrematureAges();
+
   }, [data]);
 
   const handleChange = (section: 'prev' | 'curr' | 'root', field: string, value: any) => {
@@ -91,6 +129,23 @@ export const AssessmentForm: React.FC<Props> = ({ data, onChange }) => {
       </div>
     );
   };
+  
+  const renderPrematureAgeInfo = (ages: { postConceptual: string, corrected: string }) => {
+    if (!data.isPremature) return null;
+
+    return (
+        <div className="mt-3 pt-3 border-t border-slate-100 space-y-1.5">
+             <div className="flex justify-between items-center">
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Idade Corrigida:</span>
+                <span className="font-mono font-semibold text-indigo-700 text-[11px] px-2 py-0.5 bg-indigo-50 border border-indigo-100 rounded">{ages.corrected || '-'}</span>
+            </div>
+            <div className="flex justify-between items-center">
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Idade Pós-Conceptual:</span>
+                <span className="font-mono font-semibold text-indigo-700 text-[11px] px-2 py-0.5 bg-indigo-50 border border-indigo-100 rounded">{ages.postConceptual || '-'}</span>
+            </div>
+        </div>
+    );
+  };
 
   return (
     <div className="space-y-4 font-inter">
@@ -130,18 +185,69 @@ export const AssessmentForm: React.FC<Props> = ({ data, onChange }) => {
               </button>
             </div>
           </div>
-          <div className="flex items-center gap-2 pt-1">
-            <input
-              type="checkbox"
-              id="firstConsult"
-              className="h-3.5 w-3.5 text-teal-600 focus:ring-teal-500 border-gray-300 rounded cursor-pointer"
-              checked={!!data.isFirstConsultation}
-              onChange={(e) => handleChange('root', 'isFirstConsultation', e.target.checked)}
-            />
-            <label htmlFor="firstConsult" className="text-xs text-gray-600 font-medium cursor-pointer select-none">
-              É a primeira consulta
-            </label>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="firstConsult"
+                className="h-3.5 w-3.5 text-teal-600 focus:ring-teal-500 border-gray-300 rounded cursor-pointer"
+                checked={!!data.isFirstConsultation}
+                onChange={(e) => handleChange('root', 'isFirstConsultation', e.target.checked)}
+              />
+              <label htmlFor="firstConsult" className="text-xs text-gray-600 font-medium cursor-pointer select-none">
+                É a primeira consulta
+              </label>
+            </div>
+             <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="isPremature"
+                className="h-3.5 w-3.5 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded cursor-pointer"
+                checked={!!data.isPremature}
+                onChange={(e) => handleChange('root', 'isPremature', e.target.checked)}
+              />
+              <label htmlFor="isPremature" className="text-xs text-gray-600 font-medium cursor-pointer select-none">
+                Prematuro
+              </label>
+            </div>
           </div>
+          {data.isPremature && (
+            <div>
+              <label className={labelClass}>Idade Gestacional ao Nascimento</label>
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="block text-[9px] text-gray-500 mb-0.5">Semanas</label>
+                  <input
+                    type="number"
+                    min="22"
+                    max="36"
+                    placeholder="ex: 34"
+                    className={cleanInputClass}
+                    value={data.gestationalAgeWeeks}
+                    onChange={(e) => handleChange('root', 'gestationalAgeWeeks', e.target.value === '' ? '' : Number(e.target.value))}
+                  />
+                </div>
+                <div>
+                   <label className="block text-[9px] text-gray-500 mb-0.5">Dias</label>
+                   <input
+                    type="number"
+                    min="0"
+                    max="6"
+                    placeholder="ex: 2"
+                    className={cleanInputClass}
+                    value={data.gestationalAgeDays}
+                    onChange={(e) => handleChange('root', 'gestationalAgeDays', e.target.value === '' ? '' : Number(e.target.value))}
+                  />
+                </div>
+                <div>
+                  <label className="block text-[9px] text-gray-500 mb-0.5">Classificação</label>
+                  <div className="h-[34px] flex items-center justify-center text-center w-full rounded-md border border-slate-200 bg-slate-50 py-1.5 px-2.5 text-xs text-slate-600 font-semibold cursor-default shadow-sm">
+                     {prematurityClassification || '-'}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -222,6 +328,7 @@ export const AssessmentForm: React.FC<Props> = ({ data, onChange }) => {
                    {renderZ(zScores.prev.bmi)}
                 </div>
               </div>
+              {renderPrematureAgeInfo(prematureAges.prev)}
            </div>
         </div>
       )}
@@ -302,6 +409,7 @@ export const AssessmentForm: React.FC<Props> = ({ data, onChange }) => {
                    {renderZ(zScores.curr.bmi)}
               </div>
             </div>
+            {renderPrematureAgeInfo(prematureAges.curr)}
         </div>
       </div>
 

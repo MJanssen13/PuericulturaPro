@@ -1,10 +1,14 @@
 
+
 export type Sex = 'Masculino' | 'Feminino';
 
 export interface AssessmentData {
   birthDate: string; // YYYY-MM-DD
   sex: Sex;
   isFirstConsultation?: boolean;
+  isPremature?: boolean;
+  gestationalAgeWeeks?: number | '';
+  gestationalAgeDays?: number | '';
   prev: VisitData;
   curr: VisitData;
 }
@@ -17,6 +21,7 @@ export interface VisitData {
 }
 
 // Estrutura exata da tabela da OMS (Z-4 a Z+4)
+// E Intergrowth (Z-3 a Z+3, com campos Z +/-4 podendo ser nulos)
 export interface ReferenceDataPoint {
   age_days: number;
   z_neg_4: number; // Z -4

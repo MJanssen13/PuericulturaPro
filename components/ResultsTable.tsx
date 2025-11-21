@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { AssessmentData } from '../types';
 import { 
   calculateAgeInDays, 
+  calculatePostConceptualAgeDays,
+  calculateCorrectedAgeDays,
   evaluateWeightGain, 
   evaluateHeightGrowth, 
   evaluateZScore, 
@@ -41,20 +43,30 @@ export const ResultsTable: React.FC<Props> = ({ data }) => {
       cephalic: 0,
       bmi: 0
     },
-    // Stores pre-calculated analysis blocks
     blocks: {
       weight: { status: 'neutral', text: '' } as AnalysisItem,
       height: { status: 'neutral', text: '' } as AnalysisItem,
       cephalic: { status: 'neutral', text: '' } as AnalysisItem,
       bmi: { status: 'neutral', text: '' } as AnalysisItem,
-    }
+    },
+    isPrematureMode: false,
   });
 
   useEffect(() => {
     const calculate = async () => {
-      const prevAgeDays = calculateAgeInDays(data.birthDate, data.prev.date);
-      const currAgeDays = calculateAgeInDays(data.birthDate, data.curr.date);
+      const { birthDate, sex, isPremature, gestationalAgeWeeks, gestationalAgeDays } = data;
       
+      const gestAgeWeeksNum = Number(gestationalAgeWeeks);
+      const gestAgeDaysNum = Number(gestationalAgeDays);
+      
+      const prevChronologicalAgeDays = calculateAgeInDays(birthDate, data.prev.date);
+      const currChronologicalAgeDays = calculateAgeInDays(birthDate, data.curr.date);
+
+      const prevPCADays = calculatePostConceptualAgeDays(birthDate, data.prev.date, gestAgeWeeksNum, gestAgeDaysNum);
+      const currPCADays = calculatePostConceptualAgeDays(birthDate, data.curr.date, gestAgeWeeksNum, gestAgeDaysNum);
+      
+      const isPrematureMode = isPremature && gestAgeWeeksNum > 0 && currPCADays > 0 && currPCADays <= (40 * 7);
+
       const prevBMI = (Number(data.prev.weight) && Number(data.prev.height)) 
         ? (data.prev.weight as number / 1000) / Math.pow(data.prev.height as number / 100, 2) : 0;
       const currBMI = (Number(data.curr.weight) && Number(data.curr.height))
@@ -62,7 +74,7 @@ export const ResultsTable: React.FC<Props> = ({ data }) => {
 
       const getZ = (date: string, val: number | '', type: any) => {
          let v = Number(val);
-         return evaluateZScore(data.birthDate, date, v, data.sex, type);
+         return evaluateZScore(birthDate, date, v, sex, type, isPremature, gestationalAgeWeeks, gestationalAgeDays);
       };
 
       const [pW, cW, pH, cH, pC, cC, pB, cB] = await Promise.all([
@@ -76,22 +88,16 @@ export const ResultsTable: React.FC<Props> = ({ data }) => {
         getZ(data.curr.date, currBMI, 'bmi')
       ]);
 
-      // 1. Calculate Velocity Texts (Weight / Height)
-      let wText = '';
-      let hText = '';
-      let wStatus = 'neutral';
-      let hStatus = 'neutral';
-
+      let wText = '', hText = '', wStatus = 'neutral', hStatus = 'neutral';
       if (!data.isFirstConsultation) {
-        wText = evaluateWeightGain(data.birthDate, data.prev.date, Number(data.prev.weight), data.curr.date, Number(data.curr.weight));
-        hText = evaluateHeightGrowth(data.birthDate, data.prev.date, Number(data.prev.height), data.curr.date, Number(data.curr.height));
+        wText = evaluateWeightGain(birthDate, data.prev.date, Number(data.prev.weight), data.curr.date, Number(data.curr.weight));
+        hText = evaluateHeightGrowth(birthDate, data.prev.date, Number(data.prev.height), data.curr.date, Number(data.curr.height));
         wStatus = wText.includes('Adequado') ? 'good' : (wText.includes('Abaixo') || wText.includes('Acima') ? 'warning' : 'neutral');
         hStatus = hText.includes('Adequado') ? 'good' : (hText.includes('Abaixo') || hText.includes('Acima') ? 'warning' : 'neutral');
       }
 
-      // 2. Calculate PC Analysis (Comparison against Range Z-2 to Z+2)
-      const prevRefC = await getRawReference(data.birthDate, data.prev.date, data.sex, 'cephalic');
-      const currRefC = await getRawReference(data.birthDate, data.curr.date, data.sex, 'cephalic');
+      const prevRefC = await getRawReference(birthDate, data.prev.date, sex, 'cephalic', isPremature, gestationalAgeWeeks, gestationalAgeDays);
+      const currRefC = await getRawReference(birthDate, data.curr.date, sex, 'cephalic', isPremature, gestationalAgeWeeks, gestationalAgeDays);
       
       const getPCStatusText = (val: number | '', ref: any) => {
           if (!val || !ref) return { statusText: 'N/A', rangeText: '-', isGood: false };
@@ -106,14 +112,9 @@ export const ResultsTable: React.FC<Props> = ({ data }) => {
 
       const prevPCSt = getPCStatusText(data.prev.cephalic, prevRefC);
       const currPCSt = getPCStatusText(data.curr.cephalic, currRefC);
-
       const pcBlockStatus = (prevPCSt.isGood && currPCSt.isGood) ? 'good' : 'warning';
       
-      // Helper for color class in text
-      const getColor = (isGood: boolean, valStr: string) => {
-         if (valStr === 'N/A') return 'text-slate-400';
-         return isGood ? 'text-emerald-600' : 'text-amber-600';
-      };
+      const getColor = (isGood: boolean, valStr: string) => valStr === 'N/A' ? 'text-slate-400' : isGood ? 'text-emerald-600' : 'text-amber-600';
 
       const pcText = (
         <div className="flex flex-col gap-1">
@@ -128,13 +129,10 @@ export const ResultsTable: React.FC<Props> = ({ data }) => {
         </div>
       );
 
-      // 3. Calculate BMI Analysis (Diagnosis)
       const prevDiag = getBMIDiagnosis(pB) || '-';
       const currDiag = getBMIDiagnosis(cB) || '-';
-      
       const isEutrofia = (d: string) => d.includes('Eutrofia');
       const bmiBlockStatus = (isEutrofia(prevDiag) && isEutrofia(currDiag)) ? 'good' : (prevDiag === '-' ? 'neutral' : 'warning');
-      
       const bmiText = (
         <div className="flex flex-col gap-1">
           <span className={`${isEutrofia(currDiag) ? 'text-emerald-600' : 'text-amber-600'} text-sm`}>
@@ -148,19 +146,30 @@ export const ResultsTable: React.FC<Props> = ({ data }) => {
         </div>
       );
 
+      const formatPCA = (d: number) => d > 0 ? `${Math.floor(d/7)}s ${d % 7}d` : '-';
+      
+      const getAgeDisplay = (pca: number, chronological: number) => {
+          if (isPrematureMode) return formatPCA(pca);
+          if (isPremature) return formatAgeString(calculateCorrectedAgeDays(birthDate, data.curr.date, gestAgeWeeksNum, gestAgeDaysNum));
+          return formatAgeString(chronological);
+      };
+      
+      const getPrevAgeDisplay = (pca: number, chronological: number) => {
+          if (isPremature) {
+             const prevIsPrematureMode = prevPCADays > 0 && prevPCADays <= (40*7);
+             if (prevIsPrematureMode) return formatPCA(pca);
+             return formatAgeString(calculateCorrectedAgeDays(birthDate, data.prev.date, gestAgeWeeksNum, gestAgeDaysNum));
+          }
+          return formatAgeString(chronological);
+      };
+
       setAnalysis({
-        prevAge: formatAgeString(prevAgeDays),
-        currAge: formatAgeString(currAgeDays),
-        prevBMI,
-        currBMI,
-        zScore: {
-           prevW: pW, currW: cW,
-           prevH: pH, currH: cH,
-           prevC: pC, currC: cC,
-           prevB: pB, currB: cB
-        },
+        prevAge: getPrevAgeDisplay(prevPCADays, prevChronologicalAgeDays),
+        currAge: getAgeDisplay(currPCADays, currChronologicalAgeDays),
+        prevBMI, currBMI,
+        zScore: { prevW: pW, currW: cW, prevH: pH, currH: cH, prevC: pC, currC: cC, prevB: pB, currB: cB },
         diff: {
-          days: currAgeDays - prevAgeDays,
+          days: currChronologicalAgeDays - prevChronologicalAgeDays,
           weight: (Number(data.curr.weight) - Number(data.prev.weight)),
           height: (Number(data.curr.height) - Number(data.prev.height)),
           cephalic: (Number(data.curr.cephalic) - Number(data.prev.cephalic)),
@@ -171,20 +180,18 @@ export const ResultsTable: React.FC<Props> = ({ data }) => {
           height: { status: hStatus as any, text: hText || '' },
           cephalic: { status: pcBlockStatus as any, text: pcText },
           bmi: { status: bmiBlockStatus as any, text: bmiText }
-        }
+        },
+        isPrematureMode,
       });
     };
 
     calculate();
   }, [data]);
 
-  // Helper to colorize Z-score badges
   const getZBadgeClass = (z: string) => {
     if (!z || z === "N/A") return "bg-slate-100 text-slate-400";
-    if (z.includes("Adequado") || z.includes("Eutrofia") || z.includes("Entre -1 e 0") || z.includes("Entre 0 e +1")) 
-        return "bg-emerald-100 text-emerald-700 border border-emerald-200";
-    if (z.includes("Risco") || z.includes("Sobrepeso") || z.includes("Entre +1 e +2") || z.includes("Entre -2 e -1")) 
-        return "bg-amber-100 text-amber-700 border border-amber-200";
+    if (z.includes("Adequado") || z.includes("Eutrofia") || z.includes("Entre -1 e 0") || z.includes("Entre 0 e +1")) return "bg-emerald-100 text-emerald-700 border border-emerald-200";
+    if (z.includes("Risco") || z.includes("Sobrepeso") || z.includes("Entre +1 e +2") || z.includes("Entre -2 e -1")) return "bg-amber-100 text-amber-700 border border-amber-200";
     return "bg-rose-100 text-rose-700 border border-rose-200";
   };
 
@@ -204,7 +211,7 @@ export const ResultsTable: React.FC<Props> = ({ data }) => {
     return <MinusIcon className="w-4 h-4 text-slate-300" />;
   };
 
-  const renderZBadge = (zScore: string, isBMI = false) => {
+  const renderZBadge = (zScore: string) => {
     return (
       <div className="flex flex-col items-center">
         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${getZBadgeClass(zScore)}`}>
@@ -214,7 +221,6 @@ export const ResultsTable: React.FC<Props> = ({ data }) => {
     );
   };
 
-  // Returns CSS class for TEXT color based on status (instead of background)
   const getAnalysisTextClass = (status: 'good' | 'warning' | 'bad' | 'neutral') => {
     switch(status) {
       case 'good': return "text-emerald-600 font-semibold";
@@ -230,185 +236,63 @@ export const ResultsTable: React.FC<Props> = ({ data }) => {
         <thead>
           <tr className="bg-slate-50 border-b border-slate-200">
             <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider w-32">Indicador</th>
-            {showPrev && (
-                <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-center bg-slate-50/80 border-l border-slate-200/50">
-                   Anterior <span className="block text-[10px] font-normal text-slate-400 mt-0.5">{formatDateShort(data.prev.date)}</span>
-                </th>
-            )}
-            <th className="py-3 px-4 text-xs font-bold text-teal-700 uppercase tracking-wider text-center bg-teal-50/30 border-l border-slate-200/50 border-r border-slate-200/50">
-               Atual <span className="block text-[10px] font-normal text-teal-600/70 mt-0.5">{formatDateShort(data.curr.date)}</span>
-            </th>
-            {showPrev && (
-                <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-center w-28">
-                   Diferença
-                </th>
-            )}
-            <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider w-1/3">
-               Análise / Velocidade
-            </th>
+            {showPrev && ( <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-center bg-slate-50/80 border-l border-slate-200/50"> Anterior <span className="block text-[10px] font-normal text-slate-400 mt-0.5">{formatDateShort(data.prev.date)}</span> </th> )}
+            <th className="py-3 px-4 text-xs font-bold text-teal-700 uppercase tracking-wider text-center bg-teal-50/30 border-l border-slate-200/50 border-r border-slate-200/50"> Atual <span className="block text-[10px] font-normal text-teal-600/70 mt-0.5">{formatDateShort(data.curr.date)}</span> </th>
+            {showPrev && ( <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-center w-28"> Diferença </th> )}
+            <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-center w-64"> Análise & Velocidade </th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-slate-100 bg-white">
-          
-          {/* WEIGHT */}
-          <tr className="hover:bg-slate-50/50 transition-colors">
-            <td className="py-4 px-4 font-semibold text-slate-700">Peso (g)</td>
-            
-            {showPrev && (
-                <td className="py-4 px-4 text-center border-l border-slate-50">
-                <div className="flex flex-col items-center gap-1">
-                    <span className="text-slate-600 tabular-nums text-base">{data.prev.weight}</span>
-                    {renderZBadge(analysis.zScore.prevW)}
-                </div>
-                </td>
-            )}
-
-            <td className="py-4 px-4 text-center bg-teal-50/10 border-x border-slate-100">
-              <div className="flex flex-col items-center gap-1">
-                 <span className="text-slate-900 font-bold tabular-nums text-lg">{data.curr.weight}</span>
-                 {renderZBadge(analysis.zScore.currW)}
-              </div>
-            </td>
-
-            {showPrev && (
-                <td className="py-4 px-4 text-center">
-                <div className="flex items-center justify-center gap-1">
-                    {renderTrendIcon(analysis.diff.weight)}
-                    <span className={`font-medium tabular-nums text-sm ${analysis.diff.weight > 0 ? 'text-emerald-600' : analysis.diff.weight < 0 ? 'text-rose-600' : 'text-slate-400'}`}>
-                    {analysis.diff.weight > 0 ? '+' : ''}{analysis.diff.weight} g
-                    </span>
-                </div>
-                </td>
-            )}
-
-            <td className="py-4 px-4">
-               <span className={getAnalysisTextClass(analysis.blocks.weight.status)}>
-                 {analysis.blocks.weight.text}
-               </span>
-            </td>
+        <tbody className="divide-y divide-slate-100">
+          {/* Idade */}
+          <tr className="hover:bg-slate-50/50">
+            <td className="font-bold text-slate-700 py-3 px-4">Idade {analysis.isPrematureMode ? '(Pós-Conceptual)' : (data.isPremature ? '(Corrigida)' : '')}</td>
+            {showPrev && <td className="font-semibold text-slate-600 py-3 px-4 text-center">{analysis.prevAge}</td>}
+            <td className="font-bold text-teal-800 bg-teal-50/30 py-3 px-4 text-center">{analysis.currAge}</td>
+            {showPrev && <td className="py-3 px-4 text-center text-slate-500">{analysis.diff.days} dias</td>}
+            <td className="py-3 px-4"></td>
           </tr>
 
-          {/* HEIGHT */}
-          <tr className="hover:bg-slate-50/50 transition-colors">
-            <td className="py-4 px-4 font-semibold text-slate-700">Altura (cm)</td>
-            
-            {showPrev && (
-                <td className="py-4 px-4 text-center border-l border-slate-50">
-                <div className="flex flex-col items-center gap-1">
-                    <span className="text-slate-600 tabular-nums text-base">{formatNum(data.prev.height)}</span>
-                    {renderZBadge(analysis.zScore.prevH)}
-                </div>
-                </td>
-            )}
-
-            <td className="py-4 px-4 text-center bg-teal-50/10 border-x border-slate-100">
-              <div className="flex flex-col items-center gap-1">
-                 <span className="text-slate-900 font-bold tabular-nums text-lg">{formatNum(data.curr.height)}</span>
-                 {renderZBadge(analysis.zScore.currH)}
-              </div>
-            </td>
-
-            {showPrev && (
-                <td className="py-4 px-4 text-center">
-                <div className="flex items-center justify-center gap-1">
-                    {renderTrendIcon(analysis.diff.height)}
-                    <span className={`font-medium tabular-nums text-sm ${analysis.diff.height > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
-                    {analysis.diff.height > 0 ? '+' : ''}{formatNum(analysis.diff.height)} cm
-                    </span>
-                </div>
-                </td>
-            )}
-
-            <td className="py-4 px-4">
-               <span className={getAnalysisTextClass(analysis.blocks.height.status)}>
-                 {analysis.blocks.height.text}
-               </span>
-            </td>
+          {/* Peso */}
+          <tr className="hover:bg-slate-50/50">
+            <td className="font-bold text-slate-700 py-3 px-4">Peso (g)</td>
+            {showPrev && <td className="py-3 px-4 text-center"> <span className="font-semibold">{formatNum(data.prev.weight, 0)}</span> <div className="mt-1">{renderZBadge(analysis.zScore.prevW)}</div> </td>}
+            <td className="py-3 px-4 text-center bg-teal-50/30"> <span className="font-bold text-teal-800">{formatNum(data.curr.weight, 0)}</span> <div className="mt-1">{renderZBadge(analysis.zScore.currW)}</div> </td>
+            {showPrev && <td className="py-3 px-4 text-center"> <div className="flex items-center justify-center gap-1 font-semibold text-slate-600">{renderTrendIcon(analysis.diff.weight)} {analysis.diff.weight > 0 ? '+' : ''}{formatNum(analysis.diff.weight, 0)}g</div> </td>}
+            <td className={`py-3 px-4 text-sm ${getAnalysisTextClass(analysis.blocks.weight.status)}`}>{analysis.blocks.weight.text}</td>
           </tr>
 
-          {/* CEPHALIC */}
-          <tr className="hover:bg-slate-50/50 transition-colors">
-            <td className="py-4 px-4 font-semibold text-slate-700">P. Cefálico (cm)</td>
-            
-            {showPrev && (
-                <td className="py-4 px-4 text-center border-l border-slate-50">
-                <div className="flex flex-col items-center gap-1">
-                    <span className="text-slate-600 tabular-nums text-base">{formatNum(data.prev.cephalic)}</span>
-                    {renderZBadge(analysis.zScore.prevC)}
-                </div>
-                </td>
-            )}
-
-            <td className="py-4 px-4 text-center bg-teal-50/10 border-x border-slate-100">
-              <div className="flex flex-col items-center gap-1">
-                 <span className="text-slate-900 font-bold tabular-nums text-lg">{formatNum(data.curr.cephalic)}</span>
-                 {renderZBadge(analysis.zScore.currC)}
-              </div>
-            </td>
-
-            {showPrev && (
-                <td className="py-4 px-4 text-center">
-                <div className="flex items-center justify-center gap-1">
-                    {renderTrendIcon(analysis.diff.cephalic)}
-                    <span className="text-slate-500 font-medium tabular-nums text-sm">
-                    {formatNum(analysis.diff.cephalic)} cm
-                    </span>
-                </div>
-                </td>
-            )}
-
-            <td className="py-4 px-4">
-               {analysis.blocks.cephalic.text}
-            </td>
+          {/* Altura */}
+          <tr className="hover:bg-slate-50/50">
+            <td className="font-bold text-slate-700 py-3 px-4">Altura (cm)</td>
+            {showPrev && <td className="py-3 px-4 text-center"> <span className="font-semibold">{formatNum(data.prev.height)}</span> <div className="mt-1">{renderZBadge(analysis.zScore.prevH)}</div> </td>}
+            <td className="py-3 px-4 text-center bg-teal-50/30"> <span className="font-bold text-teal-800">{formatNum(data.curr.height)}</span> <div className="mt-1">{renderZBadge(analysis.zScore.currH)}</div> </td>
+            {showPrev && <td className="py-3 px-4 text-center"> <div className="flex items-center justify-center gap-1 font-semibold text-slate-600">{renderTrendIcon(analysis.diff.height)} +{formatNum(analysis.diff.height, 1)}cm</div> </td>}
+            <td className={`py-3 px-4 text-sm ${getAnalysisTextClass(analysis.blocks.height.status)}`}>{analysis.blocks.height.text}</td>
           </tr>
 
-          {/* BMI */}
-          <tr className="hover:bg-slate-50/50 transition-colors">
-            <td className="py-4 px-4 font-semibold text-slate-700">IMC</td>
-            
-            {showPrev && (
-                <td className="py-4 px-4 text-center border-l border-slate-50">
-                <div className="flex flex-col items-center gap-1">
-                    <span className="text-slate-600 tabular-nums text-base">{formatNum(analysis.prevBMI, 2)}</span>
-                    {renderZBadge(analysis.zScore.prevB, true)}
-                </div>
-                </td>
-            )}
-
-            <td className="py-4 px-4 text-center bg-teal-50/10 border-x border-slate-100">
-              <div className="flex flex-col items-center gap-1">
-                 <span className="text-slate-900 font-bold tabular-nums text-lg">{formatNum(analysis.currBMI, 2)}</span>
-                 {renderZBadge(analysis.zScore.currB, true)}
-              </div>
-            </td>
-
-            {showPrev && (
-                <td className="py-4 px-4 text-center">
-                <div className="flex items-center justify-center gap-1">
-                    {renderTrendIcon(analysis.diff.bmi)}
-                    <span className="text-slate-500 font-medium tabular-nums text-sm">
-                    {formatNum(analysis.diff.bmi, 2)}
-                    </span>
-                </div>
-                </td>
-            )}
-
-            <td className="py-4 px-4">
-               {analysis.blocks.bmi.text}
-            </td>
+          {/* Perímetro Cefálico */}
+          <tr className="hover:bg-slate-50/50">
+            <td className="font-bold text-slate-700 py-3 px-4">PC (cm)</td>
+            {showPrev && <td className="py-3 px-4 text-center"> <span className="font-semibold">{formatNum(data.prev.cephalic)}</span> <div className="mt-1">{renderZBadge(analysis.zScore.prevC)}</div> </td>}
+            <td className="py-3 px-4 text-center bg-teal-50/30"> <span className="font-bold text-teal-800">{formatNum(data.curr.cephalic)}</span> <div className="mt-1">{renderZBadge(analysis.zScore.currC)}</div> </td>
+            {showPrev && <td className="py-3 px-4 text-center"> <div className="flex items-center justify-center gap-1 font-semibold text-slate-600">{renderTrendIcon(analysis.diff.cephalic)} +{formatNum(analysis.diff.cephalic, 1)}cm</div> </td>}
+            <td className={`py-3 px-4`}>{analysis.blocks.cephalic.text}</td>
           </tr>
 
-          {/* AGE ROW */}
-          <tr className="bg-slate-50 text-xs border-t border-slate-200">
-            <td className="py-3 px-4 font-bold text-slate-500 uppercase tracking-wider">Idade Calculada</td>
-            {showPrev && <td className="py-3 px-4 text-center font-mono text-slate-600 border-l border-slate-200">{analysis.prevAge}</td>}
-            <td className="py-3 px-4 text-center font-mono text-teal-700 font-medium border-l border-slate-200 bg-teal-50/30">{analysis.currAge}</td>
-            {showPrev ? (
-               <td className="py-3 px-4 text-center font-mono text-slate-500 border-l border-slate-200" colSpan={2}>
-                  Intervalo: <span className="font-bold">{analysis.diff.days} dias</span>
-               </td>
+          {/* IMC */}
+          <tr className="hover:bg-slate-50/50">
+            <td className="font-bold text-slate-700 py-3 px-4">IMC</td>
+            {analysis.isPrematureMode ? (
+              <td colSpan={showPrev ? 4 : 3} className="text-center text-slate-400 py-3 px-4 italic text-xs">
+                Cálculo de IMC não aplicável para prematuros nesta faixa de idade (INTERGROWTH-21).
+              </td>
             ) : (
-               <td className="py-3 px-4 border-l border-slate-200"></td>
+              <>
+                {showPrev && <td className="py-3 px-4 text-center"> <span className="font-semibold">{formatNum(analysis.prevBMI)}</span> <div className="mt-1">{renderZBadge(analysis.zScore.prevB)}</div> </td>}
+                <td className="py-3 px-4 text-center bg-teal-50/30"> <span className="font-bold text-teal-800">{formatNum(analysis.currBMI)}</span> <div className="mt-1">{renderZBadge(analysis.zScore.currB)}</div> </td>
+                {showPrev && <td className="py-3 px-4 text-center"> <div className="flex items-center justify-center gap-1 font-semibold text-slate-600">{renderTrendIcon(analysis.diff.bmi)} {analysis.diff.bmi > 0 ? '+' : ''}{formatNum(analysis.diff.bmi, 1)}</div> </td>}
+                <td className={`py-3 px-4`}>{analysis.blocks.bmi.text}</td>
+              </>
             )}
           </tr>
         </tbody>

@@ -15,7 +15,7 @@ import {
   ClockIcon,
   ClipboardDocumentListIcon,
   TableCellsIcon,
-  EyeDropperIcon
+  EyeDropperIcon,
 } from '@heroicons/react/24/outline';
 
 function App() {
@@ -26,6 +26,9 @@ function App() {
     birthDate: today,
     sex: 'Feminino',
     isFirstConsultation: false,
+    isPremature: false,
+    gestationalAgeWeeks: '',
+    gestationalAgeDays: '',
     prev: { date: today, weight: '', height: '', cephalic: '' },
     curr: { date: today, weight: '', height: '', cephalic: '' } 
   });
@@ -60,12 +63,22 @@ function App() {
          data.sex, 
          { ...data.prev, weight: Number(data.prev.weight), height: Number(data.prev.height), cephalic: Number(data.prev.cephalic), bmi: prevBMI },
          { ...data.curr, weight: Number(data.curr.weight), height: Number(data.curr.height), cephalic: Number(data.curr.cephalic), bmi: currBMI },
-         data.isFirstConsultation
+         data.isFirstConsultation,
+         data.isPremature,
+         data.gestationalAgeWeeks,
+         data.gestationalAgeDays
        );
        setSummary(text);
     };
     run();
   }, [data]);
+  
+  // Se o usuário marcar como prematuro enquanto o IMC estiver selecionado, muda para peso.
+  useEffect(() => {
+    if (data.isPremature && activeMeasure === 'bmi') {
+        setActiveMeasure('weight');
+    }
+  }, [data.isPremature, activeMeasure]);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(summary);
@@ -100,13 +113,14 @@ function App() {
       bmi: 0
     });
   }
-
-  const chartOptions = [
+  
+  const baseChartOptions = [
     { id: 'weight', label: 'Peso' },
     { id: 'height', label: 'Estatura' },
     { id: 'cephalic', label: 'Perím. Cefálico' },
     { id: 'bmi', label: 'IMC' },
   ];
+  const chartOptions = data.isPremature ? baseChartOptions.filter(opt => opt.id !== 'bmi') : baseChartOptions;
 
   const timeRangeOptions = [
     { label: '6 Meses', days: 180 },
@@ -124,30 +138,32 @@ function App() {
             <CalculatorIcon className="h-6 w-6 text-teal-200" />
             <div>
               <h1 className="text-base font-bold leading-tight">Puericultura Pro</h1>
-              <p className="text-teal-100 text-[9px] font-light">Calculadora de Crescimento OMS</p>
+              <p className="text-teal-100 text-[9px] font-light">Calculadora de Crescimento OMS & Intergrowth-21</p>
             </div>
           </div>
           
-          <div className="hidden md:flex items-center gap-2 bg-teal-800/50 px-3 py-0.5 rounded-full text-[10px] font-medium">
-            {dbStatus === 'checking' && (
-              <span className="text-teal-200 animate-pulse">Verificando conexão...</span>
-            )}
-            {dbStatus === 'connected' && (
-              <>
-                <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></div>
-                <span className="text-teal-50 flex items-center gap-1">
-                  <CloudIcon className="w-3 h-3" /> Online
-                </span>
-              </>
-            )}
-            {dbStatus === 'offline' && (
-              <>
-                <div className="w-1.5 h-1.5 rounded-full bg-orange-400"></div>
-                <span className="text-orange-100 flex items-center gap-1">
-                  <SignalSlashIcon className="w-3 h-3" /> Offline (Demo)
-                </span>
-              </>
-            )}
+          <div className="flex items-center gap-4">
+            <div className="hidden md:flex items-center gap-2 bg-teal-800/50 px-3 py-0.5 rounded-full text-[10px] font-medium">
+              {dbStatus === 'checking' && (
+                <span className="text-teal-200 animate-pulse">Verificando conexão...</span>
+              )}
+              {dbStatus === 'connected' && (
+                <>
+                  <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></div>
+                  <span className="text-teal-50 flex items-center gap-1">
+                    <CloudIcon className="w-3 h-3" /> Online
+                  </span>
+                </>
+              )}
+              {dbStatus === 'offline' && (
+                <>
+                  <div className="w-1.5 h-1.5 rounded-full bg-orange-400"></div>
+                  <span className="text-orange-100 flex items-center gap-1">
+                    <SignalSlashIcon className="w-3 h-3" /> Offline (Demo)
+                  </span>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </header>
@@ -233,7 +249,7 @@ function App() {
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-3 gap-2">
                   <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
                     <ChartPieIcon className="w-5 h-5 text-teal-600" />
-                    Curvas de Crescimento (OMS)
+                    Curvas de Crescimento
                   </h2>
                   
                   {dbStatus === 'offline' && (
@@ -289,6 +305,9 @@ function App() {
                       consultations={chartConsultations}
                       measure={activeMeasure}
                       maxAgeDays={timeRange}
+                      isPremature={data.isPremature}
+                      gestationalAgeWeeks={data.gestationalAgeWeeks}
+                      gestationalAgeDays={data.gestationalAgeDays}
                     />
                   </div>
                 </div>
