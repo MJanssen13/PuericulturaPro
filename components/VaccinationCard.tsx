@@ -57,30 +57,39 @@ export const VaccinationCard: React.FC<Props> = ({ birthDate, consultationDate, 
                 <span className="text-[10px] font-bold text-emerald-700 leading-tight uppercase">Aplicado</span>
             </div>
         );
-    } else if (data.status === 'LATE') {
+    } else if (data.status === 'Atrasado') {
         containerClass = "bg-red-100/90";
         statusContent = (
             <div className="flex flex-col items-center justify-center text-center">
                 <ExclamationTriangleIcon className="w-5 h-5 text-red-600 mb-1" />
-                <span className="text-[10px] font-bold text-red-700 leading-tight uppercase">{data.message}</span>
+                <span className="text-[10px] font-bold text-red-700 leading-tight uppercase">{data.status}</span>
             </div>
         );
-    } else if (data.status === 'DUE') {
+    } else if (data.status === 'Aplicar agora') {
         containerClass = "bg-blue-100/90";
         statusContent = (
             <div className="flex flex-col items-center justify-center text-center">
                 <CheckBadgeIcon className="w-5 h-5 text-blue-600 mb-1" />
-                <span className="text-[10px] font-bold text-blue-700 leading-tight uppercase">{data.message}</span>
+                <span className="text-[10px] font-bold text-blue-700 leading-tight uppercase">{data.status}</span>
             </div>
         );
-    } else { // FUTURE
-        const isUpcoming = data.message === "Próxima aplicação";
-        containerClass = isUpcoming ? "bg-amber-50" : "bg-gray-50";
+    } else if (data.status === 'Próxima aplicação') {
+        containerClass = "bg-amber-50";
         statusContent = (
             <div className="flex flex-col items-center justify-center text-center opacity-90">
-                <ClockIcon className={`w-4 h-4 mb-1 ${isUpcoming ? 'text-amber-600' : 'text-slate-500'}`} />
-                <span className={`text-[10px] font-bold leading-tight uppercase ${isUpcoming ? 'text-amber-700' : 'text-slate-600'}`}>
-                    {data.message}
+                <ClockIcon className="w-4 h-4 mb-1 text-amber-600" />
+                <span className="text-[10px] font-bold leading-tight uppercase text-amber-700">
+                    {data.status}
+                </span>
+            </div>
+        );
+    } else { // Aguardar
+        containerClass = "bg-gray-50";
+        statusContent = (
+            <div className="flex flex-col items-center justify-center text-center opacity-90">
+                <ClockIcon className="w-4 h-4 mb-1 text-slate-500" />
+                <span className="text-[10px] font-bold leading-tight uppercase text-slate-600">
+                    {data.status}
                 </span>
             </div>
         );
