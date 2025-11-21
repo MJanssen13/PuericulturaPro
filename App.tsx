@@ -303,7 +303,7 @@ function App() {
                     Ele não substitui a verificação física da caderneta.
                   </p>
                </div>
-               <VaccinationCard birthDate={data.birthDate} />
+               <VaccinationCard birthDate={data.birthDate} consultationDate={data.curr.date} />
             </div>
           )}
 

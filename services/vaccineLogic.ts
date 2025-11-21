@@ -86,7 +86,7 @@ export const VACCINE_CALENDAR: VaccineRule[] = [
   { id: 'hpv_2', name: 'HPV', doseLabel: 'Dose', targetAgeDays: 9.5 * Y, minAgeDays: 9 * Y, maxAgeDays: 15 * Y, description: '(6 meses após a 1ª)' },
 ];
 
-export function getVaccineStatus(ruleId: string, birthDate: string): VaccineStatus {
+export function getVaccineStatus(ruleId: string, birthDate: string, consultationDate: string): VaccineStatus {
   const rule = VACCINE_CALENDAR.find(r => r.id === ruleId);
   if (!rule) {
     return {
@@ -97,7 +97,7 @@ export function getVaccineStatus(ruleId: string, birthDate: string): VaccineStat
     };
   }
 
-  const ageDays = calculateAgeInDays(birthDate, new Date().toISOString().split('T')[0]);
+  const ageDays = calculateAgeInDays(birthDate, consultationDate);
   const daysUntilMin = rule.minAgeDays - ageDays;
   const daysOverMax = ageDays - rule.maxAgeDays;
 

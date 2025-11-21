@@ -6,10 +6,11 @@ import { ExclamationTriangleIcon, CheckBadgeIcon, ClockIcon, CheckCircleIcon } f
 
 interface Props {
   birthDate: string;
+  consultationDate: string;
   patientName?: string;
 }
 
-export const VaccinationCard: React.FC<Props> = ({ birthDate, patientName }) => {
+export const VaccinationCard: React.FC<Props> = ({ birthDate, consultationDate, patientName }) => {
   // State to track which vaccines are marked as applied
   const [appliedVaccines, setAppliedVaccines] = useState<Record<string, boolean>>({});
 
@@ -41,7 +42,7 @@ export const VaccinationCard: React.FC<Props> = ({ birthDate, patientName }) => 
   };
 
   const renderCell = (ruleId: string, bgColor: string) => {
-    const data = getVaccineStatus(ruleId, birthDate);
+    const data = getVaccineStatus(ruleId, birthDate, consultationDate);
     const isApplied = appliedVaccines[ruleId];
     
     let statusContent = null;
