@@ -5,12 +5,9 @@ import { generateSummary } from './services/puericulturaLogic';
 import { GrowthChart } from './components/GrowthChart';
 import { ResultsTable } from './components/ResultsTable';
 import { VaccinationCard } from './components/VaccinationCard';
-import { checkSupabaseConnection } from './lib/supabase';
 import { 
   CalculatorIcon, 
   DocumentDuplicateIcon,
-  CloudIcon,
-  SignalSlashIcon,
   ChartPieIcon,
   ClockIcon,
   ClipboardDocumentListIcon,
@@ -358,12 +355,12 @@ function App() {
   };
 
   const clearLocalDatabase = () => {
-    if (confirm("Tem certeza que deseja zerar os arquivos locais de curvas Z-score da OMS persistidos neste navegador?")) {
+    if (confirm("Tem certeza que deseja limpar o cache local de curvas Z-score temporárias neste navegador?")) {
       FILE_DEFINITIONS.forEach(def => {
         localStorage.removeItem(`puericultura_oms_${def.measure}_${def.sex}`);
       });
       countTotalRecords();
-      alert("Banco de dados local limpo! O aplicativo voltou a consultar o Supabase.");
+      alert("Cache limpo! O aplicativo voltou a carregar unicamente as tabelas JSON oficiais do repositório.");
     }
   };
 
@@ -379,7 +376,6 @@ function App() {
   });
 
   const [summary, setSummary] = useState('');
-  const [dbStatus, setDbStatus] = useState<'checking' | 'connected' | 'offline'>('checking');
 
   // Navigation State
   const [activeTab, setActiveTab] = useState<'growth' | 'vaccines'>('growth');
@@ -387,13 +383,6 @@ function App() {
   // State para os Gráficos
   const [activeMeasure, setActiveMeasure] = useState<'weight' | 'height' | 'cephalic' | 'bmi'>('weight');
   const [timeRange, setTimeRange] = useState<number | null>(365); // Default 1 year
-
-  // Verifica conexão ao iniciar
-  useEffect(() => {
-    checkSupabaseConnection().then(isConnected => {
-      setDbStatus(isConnected ? 'connected' : 'offline');
-    });
-  }, []);
 
   useEffect(() => {
     const run = async () => {
@@ -496,39 +485,22 @@ function App() {
                 <>
                   <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></div>
                   <span className="flex items-center gap-1">
-                    <FolderOpenIcon className="w-3 h-3" /> GitHub OMS: Ativo ({localRecordsCount} pts)
+                    <FolderOpenIcon className="w-3 h-3" /> Repositório OMS: Ativo ({localRecordsCount} pts)
                   </span>
                 </>
               ) : (
                 <>
                   <div className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></div>
                   <span className="flex items-center gap-1">
-                    <FolderOpenIcon className="w-3 h-3" /> GitHub OMS: s/ dados xlsx
+                    <FolderOpenIcon className="w-3 h-3" /> Repositório OMS: Sem dados xlsx
                   </span>
                 </>
               )}
             </div>
 
-            <div className="hidden md:flex items-center gap-2 bg-teal-800/50 px-3 py-0.5 rounded-full text-[10px] font-medium">
-              {dbStatus === 'checking' && (
-                <span className="text-teal-200 animate-pulse">Verificando Supabase...</span>
-              )}
-              {dbStatus === 'connected' && (
-                <>
-                  <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></div>
-                  <span className="text-teal-50 flex items-center gap-1">
-                    <CloudIcon className="w-3 h-3" /> Supabase Online
-                  </span>
-                </>
-              )}
-              {dbStatus === 'offline' && (
-                <>
-                  <div className="w-1.5 h-1.5 rounded-full bg-orange-400"></div>
-                  <span className="text-orange-100 flex items-center gap-1">
-                    <SignalSlashIcon className="w-3 h-3" /> Supabase Offline
-                  </span>
-                </>
-              )}
+            <div className="hidden md:flex items-center gap-2 bg-teal-800/50 px-3 py-0.5 rounded-full text-[10px] font-semibold text-teal-100">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-300"></div>
+              <span>Fonte: Base Local Repositório (.json)</span>
             </div>
           </div>
         </div>
@@ -791,12 +763,6 @@ function App() {
                     <ChartPieIcon className="w-5 h-5 text-teal-600" />
                     Curvas de Crescimento
                   </h2>
-                  
-                  {dbStatus === 'offline' && (
-                    <span className="text-[10px] text-orange-600 bg-orange-50 px-2 py-0.5 rounded border border-orange-200 font-medium">
-                      Modo Demonstração
-                    </span>
-                  )}
                 </div>
                 
                 <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">

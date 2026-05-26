@@ -153,9 +153,11 @@ function run() {
       const data = parseWorkbook(fullPath, mapping.measure);
       const outputFilename = `${mapping.measure}_${mapping.sex}.json`;
       const outputPath = path.join(OUTPUT_DIR, outputFilename);
+      const outputBackupPath = path.join(SOURCE_DIR, outputFilename);
       
       fs.writeFileSync(outputPath, JSON.stringify(data, null, 2));
-      console.log(`SUCESSO: Escrito ${data.length} pontos para ${outputFilename} em /services/oms-data/`);
+      fs.writeFileSync(outputBackupPath, JSON.stringify(data, null, 2));
+      console.log(`SUCESSO: Escrito ${data.length} pontos para ${outputFilename} em /services/oms-data/ e /Dados-OMS/`);
       successCount++;
     } catch (e: any) {
       console.error(`ERRO ao processar ${mapping.fileName}:`, e.message);
