@@ -65,7 +65,8 @@ export const ResultsTable: React.FC<Props> = ({ data }) => {
       const prevPCADays = calculatePostConceptualAgeDays(birthDate, data.prev.date, gestAgeWeeksNum, gestAgeDaysNum);
       const currPCADays = calculatePostConceptualAgeDays(birthDate, data.curr.date, gestAgeWeeksNum, gestAgeDaysNum);
       
-      const isPrematureMode = isPremature && gestAgeWeeksNum > 0 && currPCADays > 0 && currPCADays <= (40 * 7);
+      const PRETERM_LIMIT_DAYS = 60 * 7; // 60 weeks
+      const isPrematureMode = isPremature && gestAgeWeeksNum > 0 && currPCADays > 0 && currPCADays <= PRETERM_LIMIT_DAYS;
 
       const prevBMI = (Number(data.prev.weight) && Number(data.prev.height)) 
         ? (data.prev.weight as number / 1000) / Math.pow(data.prev.height as number / 100, 2) : 0;
@@ -141,15 +142,27 @@ export const ResultsTable: React.FC<Props> = ({ data }) => {
       
       const getAgeDisplay = (pca: number, chronological: number) => {
           if (isPrematureMode) return formatPCA(pca);
-          if (isPremature) return formatAgeString(calculateCorrectedAgeDays(birthDate, data.curr.date, gestAgeWeeksNum, gestAgeDaysNum));
+          if (isPremature) {
+             const correctedAge = calculateCorrectedAgeDays(birthDate, data.curr.date, gestAgeWeeksNum, gestAgeDaysNum);
+             if (correctedAge <= 730) {
+                return `${formatAgeString(correctedAge)}`;
+             } else {
+                return `${formatAgeString(chronological)}`;
+             }
+          }
           return formatAgeString(chronological);
       };
       
       const getPrevAgeDisplay = (pca: number, chronological: number) => {
           if (isPremature) {
-             const prevIsPrematureMode = prevPCADays > 0 && prevPCADays <= (40*7);
+             const prevIsPrematureMode = prevPCADays > 0 && prevPCADays <= PRETERM_LIMIT_DAYS;
              if (prevIsPrematureMode) return formatPCA(pca);
-             return formatAgeString(calculateCorrectedAgeDays(birthDate, data.prev.date, gestAgeWeeksNum, gestAgeDaysNum));
+             const correctedAge = calculateCorrectedAgeDays(birthDate, data.prev.date, gestAgeWeeksNum, gestAgeDaysNum);
+             if (correctedAge <= 730) {
+                return `${formatAgeString(correctedAge)}`;
+             } else {
+                return `${formatAgeString(chronological)}`;
+             }
           }
           return formatAgeString(chronological);
       };

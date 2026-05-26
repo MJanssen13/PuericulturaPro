@@ -264,12 +264,12 @@ export async function getRawReference(
 ): Promise<ReferenceDataPoint | null> {
   const gestAgeWeeksNum = Number(gestationalAgeWeeks);
   const gestAgeDaysNum = Number(gestationalAgeDays);
-  const PRETERM_CHART_PCA_LIMIT_DAYS = 40 * 7; // 40 weeks
+  const PRETERM_CHART_PCA_LIMIT_DAYS = 60 * 7; // 60 weeks (Intergrowth-21)
 
   if (isPremature && gestAgeWeeksNum > 0) {
     const pcaDays = calculatePostConceptualAgeDays(birthDate, date, gestAgeWeeksNum, gestAgeDaysNum);
     
-    // Se prematuro e dentro da janela de idade do INTERGROWTH, usa a curva de prematuro
+    // Se prematuro e dentro da janela de idade do INTERGROWTH (até 60 semanas)
     if (pcaDays > 0 && pcaDays <= PRETERM_CHART_PCA_LIMIT_DAYS) {
       // IMC não é aplicável para Intergrowth
       if (measure === 'bmi') return null;
@@ -278,10 +278,18 @@ export async function getRawReference(
       const { data: table } = await getReferenceTable(measureToFetch, sex); 
       return getInterpolatedReference(table, pcaDays);
     } else {
-       // Após o limite do Intergrowth, usa a idade corrigida na curva da OMS
+       // Após o limite do Intergrowth (60 semanas), usa a idade corrigida na curva da OMS até os dois anos de idade corrigida (730 dias)
        const correctedAge = calculateCorrectedAgeDays(birthDate, date, gestAgeWeeksNum, gestAgeDaysNum);
-       const { data: table } = await getReferenceTable(measure, sex);
-       return getInterpolatedReference(table, correctedAge);
+       
+       if (correctedAge <= 730) {
+         const { data: table } = await getReferenceTable(measure, sex);
+         return getInterpolatedReference(table, correctedAge);
+       } else {
+         // Após dois anos corrigidos, utiliza a idade cronológica
+         const ageDays = calculateAgeInDays(birthDate, date);
+         const { data: table } = await getReferenceTable(measure, sex);
+         return getInterpolatedReference(table, ageDays);
+       }
     }
   }
   

@@ -22,7 +22,8 @@ async function startServer() {
     }
 
     try {
-      const dir1 = path.join(process.cwd(), "Dados-OMS");
+      const isPreterm = measure.startsWith("preterm_");
+      const dir1 = path.join(process.cwd(), isPreterm ? "Dados-IG21" : "Dados-OMS");
       const dir2 = path.join(process.cwd(), "services", "oms-data");
       
       // Garante que ambos diretórios existem
@@ -39,7 +40,7 @@ async function startServer() {
       fs.writeFileSync(path.join(dir1, filename), JSON.stringify(data, null, 2), "utf8");
       fs.writeFileSync(path.join(dir2, filename), JSON.stringify(data, null, 2), "utf8");
       
-      console.log(`[API] Gravado arquivo JSON nos locais: Dados-OMS e services/oms-data: ${filename} com ${data.length} pontos.`);
+      console.log(`[API] Gravado arquivo JSON nos locais: ${isPreterm ? "Dados-IG21" : "Dados-OMS"} e services/oms-data: ${filename} com ${data.length} pontos.`);
       
       return res.json({ 
         success: true, 
@@ -61,9 +62,10 @@ async function startServer() {
     }
 
     const filename = `${measure}_${sex}.json`;
+    const isPreterm = String(measure).startsWith("preterm_");
     
-    // Procura primeiro em Dados-OMS, depois em services/oms-data
-    const path1 = path.join(process.cwd(), "Dados-OMS", filename);
+    // Procura primeiro em Dados-IG21/Dados-OMS, depois em services/oms-data
+    const path1 = path.join(process.cwd(), isPreterm ? "Dados-IG21" : "Dados-OMS", filename);
     const path2 = path.join(process.cwd(), "services", "oms-data", filename);
 
     let filePath = "";

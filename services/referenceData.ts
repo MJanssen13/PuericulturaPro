@@ -10,6 +10,14 @@ import bmi_Masculino from './oms-data/bmi_Masculino.json';
 import cephalic_Feminino from './oms-data/cephalic_Feminino.json';
 import cephalic_Masculino from './oms-data/cephalic_Masculino.json';
 
+// Importa os arquivos JSON compilados a partir de curvas Intergrowth-21 de Prematuro
+import preterm_weight_Feminino from './oms-data/preterm_weight_Feminino.json';
+import preterm_weight_Masculino from './oms-data/preterm_weight_Masculino.json';
+import preterm_height_Feminino from './oms-data/preterm_height_Feminino.json';
+import preterm_height_Masculino from './oms-data/preterm_height_Masculino.json';
+import preterm_cephalic_Feminino from './oms-data/preterm_cephalic_Feminino.json';
+import preterm_cephalic_Masculino from './oms-data/preterm_cephalic_Masculino.json';
+
 const LOCAL_OMS_DATA: Record<string, ReferenceDataPoint[]> = {
   weight_Feminino: weight_Feminino as ReferenceDataPoint[],
   weight_Masculino: weight_Masculino as ReferenceDataPoint[],
@@ -19,6 +27,14 @@ const LOCAL_OMS_DATA: Record<string, ReferenceDataPoint[]> = {
   bmi_Masculino: bmi_Masculino as ReferenceDataPoint[],
   cephalic_Feminino: cephalic_Feminino as ReferenceDataPoint[],
   cephalic_Masculino: cephalic_Masculino as ReferenceDataPoint[],
+
+  // Prematuros (Intergrowth-21)
+  preterm_weight_Feminino: preterm_weight_Feminino as ReferenceDataPoint[],
+  preterm_weight_Masculino: preterm_weight_Masculino as ReferenceDataPoint[],
+  preterm_height_Feminino: preterm_height_Feminino as ReferenceDataPoint[],
+  preterm_height_Masculino: preterm_height_Masculino as ReferenceDataPoint[],
+  preterm_cephalic_Feminino: preterm_cephalic_Feminino as ReferenceDataPoint[],
+  preterm_cephalic_Masculino: preterm_cephalic_Masculino as ReferenceDataPoint[],
 };
 
 // Cache simples para evitar leituras repetidas
@@ -74,14 +90,12 @@ export async function getReferenceTable(
   }
 
   // 2ª PRIORIDADE: Banco de Dados pré-compilado local de arquivos JSON do repositório (services/oms-data)
-  if (!measure.startsWith('preterm')) {
-    const localData = LOCAL_OMS_DATA[cacheKey];
-    if (localData && localData.length > 0) {
-      console.log(`[Local Files Success] Usando dados locais com ${localData.length} registros para ${measure} (${sex})`);
-      const result = { data: localData, source: 'local' as const };
-      tableCache[cacheKey] = result;
-      return result;
-    }
+  const localData = LOCAL_OMS_DATA[cacheKey];
+  if (localData && localData.length > 0) {
+    console.log(`[Local Files Success] Usando dados locais com ${localData.length} registros para ${measure} (${sex})`);
+    const result = { data: localData, source: 'local' as const };
+    tableCache[cacheKey] = result;
+    return result;
   }
 
   // Caso não existam dados locais em nenhuma das fontes, retornamos lista vazia

@@ -38,7 +38,7 @@ export const GrowthChart: React.FC<Props> = ({
 
     const gestAgeWeeksNum = Number(gestationalAgeWeeks);
     const gestAgeDaysNum = Number(gestationalAgeDays);
-    const PRETERM_CHART_PCA_LIMIT_DAYS = 40 * 7; // 40 semanas
+    const PRETERM_CHART_PCA_LIMIT_DAYS = 60 * 7; // 60 semanas (60 * 7 = 420 dias)
 
     // Decide mode based on the latest available data point or today.
     const latestConsultation = consultations.length > 0 ? consultations.reduce((a, b) => new Date(a.date) > new Date(b.date) ? a : b) : null;
@@ -81,7 +81,12 @@ export const GrowthChart: React.FC<Props> = ({
         return calculatePostConceptualAgeDays(birthDate, consultationDate, gestAgeWeeksNum, gestAgeDaysNum);
     }
     if (isPremature) {
-        return calculateCorrectedAgeDays(birthDate, consultationDate, gestAgeWeeksNum, gestAgeDaysNum);
+        const correctedAge = calculateCorrectedAgeDays(birthDate, consultationDate, gestAgeWeeksNum, gestAgeDaysNum);
+        if (correctedAge <= 730) {
+            return correctedAge;
+        } else {
+            return calculateAgeInDays(birthDate, consultationDate);
+        }
     }
     return calculateAgeInDays(birthDate, consultationDate);
   };
@@ -189,7 +194,7 @@ export const GrowthChart: React.FC<Props> = ({
   };
   
   const domainStart = chartMode === 'preterm' ? Math.floor(Number(gestationalAgeWeeks) * 7 + Number(gestationalAgeDays)) : 0;
-  const domainEnd = chartMode === 'preterm' ? 40*7 : (maxAgeDays || 'auto');
+  const domainEnd = chartMode === 'preterm' ? 60*7 : (maxAgeDays || 'auto');
 
   return (
     <div className="w-full h-full">

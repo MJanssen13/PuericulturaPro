@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { AssessmentData, Consultation } from './types';
 import { AssessmentForm } from './components/AssessmentForm';
-import { generateSummary } from './services/puericulturaLogic';
+import { generateSummary, calculatePostConceptualAgeDays } from './services/puericulturaLogic';
 import { GrowthChart } from './components/GrowthChart';
 import { ResultsTable } from './components/ResultsTable';
 import { VaccinationCard } from './components/VaccinationCard';
@@ -22,8 +22,9 @@ import {
 } from '@heroicons/react/24/outline';
 import * as XLSX from 'xlsx';
 
-// Mapeamento dos 8 arquivos padrão da OMS e suas respectivas métricas e sexos
+// Mapeamento das tabelas de referência da OMS (8) e do Intergrowth-21 (6)
 const FILE_DEFINITIONS = [
+  // Curvas OMS
   { fileName: 'lhfa-girls-zscore-expanded-tables.xlsx', measure: 'height', sex: 'Feminino', label: 'Estatura (Meninas)' },
   { fileName: 'lhfa-boys-zscore-expanded-tables.xlsx', measure: 'height', sex: 'Masculino', label: 'Estatura (Meninos)' },
   { fileName: 'wfa-girls-zscore-expanded-tables.xlsx', measure: 'weight', sex: 'Feminino', label: 'Peso (Meninas)' },
@@ -32,6 +33,14 @@ const FILE_DEFINITIONS = [
   { fileName: 'bfa-boys-zscore-expanded-tables.xlsx', measure: 'bmi', sex: 'Masculino', label: 'IMC (Meninos)' },
   { fileName: 'hcfa-girls-zscore-expanded-tables.xlsx', measure: 'cephalic', sex: 'Feminino', label: 'Perím. Cefálico (Meninas)' },
   { fileName: 'hcfa-boys-zscore-expanded-tables.xlsx', measure: 'cephalic', sex: 'Masculino', label: 'Perím. Cefálico (Meninos)' },
+
+  // Curvas de Prematuros (Intergrowth-21)
+  { fileName: 'grow_preterm-zs-girls_It_table.xlsx', measure: 'preterm_height', sex: 'Feminino', label: 'Estatura Preter. (Meninas)' },
+  { fileName: 'grow_preterm-zs-boys_It_tablegr.xlsx', measure: 'preterm_height', sex: 'Masculino', label: 'Estatura Preter. (Meninos)' },
+  { fileName: 'grow_preterm-zs-girls_bw_table.xlsx', measure: 'preterm_weight', sex: 'Feminino', label: 'Peso Preter. (Meninas)' },
+  { fileName: 'grow_preterm-zs-boys_bw_table.xlsx', measure: 'preterm_weight', sex: 'Masculino', label: 'Peso Preter. (Meninos)' },
+  { fileName: 'grow_preterm-zs-girls_hc_table.xlsx', measure: 'preterm_cephalic', sex: 'Feminino', label: 'Perím. Cefálico Preter. (Meninas)' },
+  { fileName: 'grow_preterm-zs-boys_hc_table.xlsx', measure: 'preterm_cephalic', sex: 'Masculino', label: 'Perím. Cefálico Preter. (Meninos)' },
 ];
 
 // Importa planilhas locais compiladas para checar status no painel
@@ -43,6 +52,14 @@ import bmi_Feminino from './services/oms-data/bmi_Feminino.json';
 import bmi_Masculino from './services/oms-data/bmi_Masculino.json';
 import cephalic_Feminino from './services/oms-data/cephalic_Feminino.json';
 import cephalic_Masculino from './services/oms-data/cephalic_Masculino.json';
+
+// Importa arquivos preterm locais compilados para checar status no painel
+import preterm_weight_Feminino from './services/oms-data/preterm_weight_Feminino.json';
+import preterm_weight_Masculino from './services/oms-data/preterm_weight_Masculino.json';
+import preterm_height_Feminino from './services/oms-data/preterm_height_Feminino.json';
+import preterm_height_Masculino from './services/oms-data/preterm_height_Masculino.json';
+import preterm_cephalic_Feminino from './services/oms-data/preterm_cephalic_Feminino.json';
+import preterm_cephalic_Masculino from './services/oms-data/preterm_cephalic_Masculino.json';
 
 function App() {
   // Get today's date for default initialization
@@ -70,11 +87,15 @@ function App() {
 
   const countTotalRecords = () => {
     let count = 0;
-    // Json estático pré-compilado
+    // Json estático pré-compilado (OMS + Prematuro)
     count += (weight_Feminino?.length || 0) + (weight_Masculino?.length || 0);
     count += (height_Feminino?.length || 0) + (height_Masculino?.length || 0);
     count += (bmi_Feminino?.length || 0) + (bmi_Masculino?.length || 0);
     count += (cephalic_Feminino?.length || 0) + (cephalic_Masculino?.length || 0);
+
+    count += (preterm_weight_Feminino?.length || 0) + (preterm_weight_Masculino?.length || 0);
+    count += (preterm_height_Feminino?.length || 0) + (preterm_height_Masculino?.length || 0);
+    count += (preterm_cephalic_Feminino?.length || 0) + (preterm_cephalic_Masculino?.length || 0);
 
     // Dados salvos de forma dinâmica em localStorage pelo usuário
     FILE_DEFINITIONS.forEach(def => {
@@ -119,24 +140,40 @@ function App() {
         return null;
       };
 
-      const day = getVal(['day', 'age_days', 'days', 'day_number']);
+      const isPretermFile = measure.startsWith('preterm_');
+      let day = getVal([
+        'day', 'age_days', 'days', 'day_number', 
+        'idade gestacional', 'idade_gestacional', 'ig', 
+        'semana', 'semanas', 'week', 'weeks', 'gestational_age'
+      ]);
+
       if (day === null || isNaN(day)) {
         continue;
       }
 
+      // Se for preterm e o dia/semana for <= 100, significa que a idade está em semanas.
+      // Nesse caso, multiplicamos por 7 para converter em idade gestacional pós-conceptual em dias.
+      if (isPretermFile && day <= 100) {
+        day = day * 7;
+      }
+
       // Desvios
-      let sd4neg = getVal(['sd4neg', 'sd4_neg', 'sd_4neg', 'sd4n']) ?? 0;
-      let sd3neg = getVal(['sd3neg', 'sd3_neg', 'sd_3neg', 'sd3n', 'sd3negativa']) ?? 0;
-      let sd2neg = getVal(['sd2neg', 'sd2_neg', 'sd_2neg', 'sd2n', 'sd2negativa']) ?? 0;
-      let sd1neg = getVal(['sd1neg', 'sd1_neg', 'sd_1neg', 'sd1n', 'sd1negativa']) ?? 0;
-      let sd0    = getVal(['sd0', 'z0', 'z_0', 'sd00', 'sd_0', 'm', 'median']) ?? 0;
-      let sd1    = getVal(['sd1', 'z1', 'z_pos_1', 'sd1p', 'sd1positiva']) ?? 0;
-      let sd2    = getVal(['sd2', 'z2', 'z_pos_2', 'sd2p', 'sd2positiva']) ?? 0;
-      let sd3    = getVal(['sd3', 'z3', 'z_pos_3', 'sd3p', 'sd3positiva']) ?? 0;
-      let sd4    = getVal(['sd4', 'z4', 'z_pos_4', 'sd4p', 'sd4positiva']) ?? 0;
+      let sd4neg = getVal(['sd4neg', 'sd4_neg', 'sd_4neg', 'sd4n', '-4', 'z-score -4', 'z_score_neg_4']) ?? 0;
+      let sd3neg = getVal(['sd3neg', 'sd3_neg', 'sd_3neg', 'sd3n', 'sd3negativa', '-3', 'z-score -3', 'z_score_neg_3', 'sd3_negativa']) ?? 0;
+      let sd2neg = getVal(['sd2neg', 'sd2_neg', 'sd_2neg', 'sd2n', 'sd2negativa', '-2', 'z-score -2', 'z_score_neg_2', 'sd2_negativa']) ?? 0;
+      let sd1neg = getVal(['sd1neg', 'sd1_neg', 'sd_1neg', 'sd1n', 'sd1negativa', '-1', 'z-score -1', 'z_score_neg_1', 'sd1_negativa']) ?? 0;
+      let sd0    = getVal([
+        'sd0', 'z0', 'z_0', 'sd00', 'sd_0', 'm', 'median', 
+        '0', 'z-score 0', 'z_score_0', 'media', 'média', 'média (0)', 'media (0)', 'm_val'
+      ]) ?? 0;
+      let sd1    = getVal(['sd1', 'z1', 'z_pos_1', 'sd1p', 'sd1positiva', '1', '+1', 'z-score 1', 'z_score_pos_1', 'sd1_positiva']) ?? 0;
+      let sd2    = getVal(['sd2', 'z2', 'z_pos_2', 'sd2p', 'sd2positiva', '2', '+2', 'z-score 2', 'z_score_pos_2', 'sd2_positiva']) ?? 0;
+      let sd3    = getVal(['sd3', 'z3', 'z_pos_3', 'sd3p', 'sd3positiva', '3', '+3', 'z-score 3', 'z_score_pos_3', 'sd3_positiva']) ?? 0;
+      let sd4    = getVal(['sd4', 'z4', 'z_pos_4', 'sd4p', 'sd4positiva', '4', '+4', 'z-score 4', 'z_score_pos_4', 'sd4_positiva']) ?? 0;
 
       // Conversão automática de peso de Kg para Gramas no frontend se necessário
-      if (measure === 'weight' && sd0 < 100 && sd0 > 0) {
+      // (Algumas planilhas OMS ou Preterm de Peso mostram valores em Kg de 0.2 a 15, ao invés de gramas)
+      if ((measure === 'weight' || measure === 'preterm_weight') && sd0 < 100 && sd0 > 0) {
         sd4neg = Math.round(sd4neg * 1000);
         sd3neg = Math.round(sd3neg * 1000);
         sd2neg = Math.round(sd2neg * 1000);
@@ -201,17 +238,20 @@ function App() {
         currentLogs = [...currentLogs, `Baixando ${def.fileName}...`];
         setSyncStatus(prev => ({
           ...prev,
-          progress: `Baixando ${successCount}/8: ${def.label}...`,
+          progress: `Baixando ${successCount}/${FILE_DEFINITIONS.length}: ${def.label}...`,
           logs: currentLogs
         }));
 
-        const folderPart = folder ? folder + '/' : '';
+        // Se for Curva de Prematuros, busca da pasta Dados-IG21 do repositório
+        const isPreterm = def.measure.startsWith('preterm_');
+        const activeFolder = isPreterm ? 'Dados-IG21' : (folder || 'Dados-OMS');
+        const folderPart = activeFolder ? activeFolder + '/' : '';
         const url = `https://raw.githubusercontent.com/${repoClean}/${branch}/${folderPart}${def.fileName}`;
 
         try {
           const response = await fetch(url);
           if (!response.ok) {
-            throw new Error(`Erro HTTP ${response.status} ao baixar arquivo.`);
+            throw new Error(`Erro HTTP ${response.status} ao baixar arquivo de ${url}`);
           }
 
           const buffer = await response.arrayBuffer();
@@ -240,7 +280,7 @@ function App() {
         setSyncStatus({
           loading: false,
           progress: 'Finalizado com SUCESSO!',
-          logs: [...currentLogs, `✓ Sincronização concluída! Carregado ${totalPointsLoaded} pontos do GitHub em ${successCount}/8 curvas.`],
+          logs: [...currentLogs, `✓ Sincronização concluída! Carregado ${totalPointsLoaded} pontos do GitHub em ${successCount}/${FILE_DEFINITIONS.length} curvas.`],
           success: `Banco de dados sincronizado com sucesso! ${successCount} curvas gravadas e prontas para uso.`,
         });
         countTotalRecords();
@@ -249,7 +289,7 @@ function App() {
           loading: false,
           progress: 'Incompatibilidade ou falha.',
           logs: [...currentLogs, `✗ Nenhuma curva pôde ser sincronizada do GitHub.`],
-          error: 'Nenhum dos 8 arquivos foi carregado do GitHub. Certifique-se de que o repositório é público e que o caminho/branch estão corretos ou use o Upload manual.',
+          error: 'Nenhum dos arquivos de curva foi carregado do GitHub. Certifique-se de que o repositório é público e que o caminho/branch estão corretos ou use o Upload manual.',
         });
       }
 
@@ -283,6 +323,48 @@ function App() {
         const lowerName = file.name.toLowerCase();
         
         const matchedDef = FILE_DEFINITIONS.find(def => 
+          lowerName.includes(def.fileName.toLowerCase())
+        ) || FILE_DEFINITIONS.find(def => {
+          const isPreterm = lowerName.includes('preterm') || lowerName.includes('grow_preterm') || lowerName.includes('it_table') || lowerName.includes('bw_table') || lowerName.includes('hc_table');
+          const isBoy = lowerName.includes('boy') || lowerName.includes('masc') || lowerName.includes('_boys_') || lowerName.includes('-boys-') || lowerName.includes('boys');
+          const isGirl = lowerName.includes('girl') || lowerName.includes('fem') || lowerName.includes('_girls_') || lowerName.includes('-girls-') || lowerName.includes('girls');
+          
+          if (isPreterm) {
+            const isHeight = lowerName.includes('it_table') || lowerName.includes('lh_') || lowerName.includes('length') || lowerName.includes('estatura') || lowerName.includes('altura') || lowerName.includes('alt');
+            const isWeight = lowerName.includes('bw_table') || lowerName.includes('weight') || lowerName.includes('peso') || lowerName.includes('bw');
+            const isCephalic = lowerName.includes('hc_table') || lowerName.includes('cephalic') || lowerName.includes('perim') || lowerName.includes('hc_') || lowerName.includes('cef');
+            
+            if (isGirl && def.sex === 'Feminino') {
+               if (isHeight && def.measure === 'preterm_height') return true;
+               if (isWeight && def.measure === 'preterm_weight') return true;
+               if (isCephalic && def.measure === 'preterm_cephalic') return true;
+            }
+            if (isBoy && def.sex === 'Masculino') {
+               if (isHeight && def.measure === 'preterm_height') return true;
+               if (isWeight && def.measure === 'preterm_weight') return true;
+               if (isCephalic && def.measure === 'preterm_cephalic') return true;
+            }
+          } else {
+            const isHeight = lowerName.includes('lhfa') || lowerName.includes('height') || lowerName.includes('estatura') || lowerName.includes('altura') || lowerName.includes('alt');
+            const isWeight = lowerName.includes('wfa') || lowerName.includes('weight') || lowerName.includes('peso');
+            const isBmi = lowerName.includes('bfa') || lowerName.includes('bmi') || lowerName.includes('imc');
+            const isCephalic = lowerName.includes('hcfa') || lowerName.includes('cephalic') || lowerName.includes('perim') || lowerName.includes('cef');
+            
+            if (isGirl && def.sex === 'Feminino') {
+               if (isHeight && def.measure === 'height') return true;
+               if (isWeight && def.measure === 'weight') return true;
+               if (isBmi && def.measure === 'bmi') return true;
+               if (isCephalic && def.measure === 'cephalic') return true;
+            }
+            if (isBoy && def.sex === 'Masculino') {
+               if (isHeight && def.measure === 'height') return true;
+               if (isWeight && def.measure === 'weight') return true;
+               if (isBmi && def.measure === 'bmi') return true;
+               if (isCephalic && def.measure === 'cephalic') return true;
+            }
+          }
+          return false;
+        }) || FILE_DEFINITIONS.find(def => 
           lowerName.includes(def.measure) && 
           (lowerName.includes(def.sex.toLowerCase()) || 
            (def.sex === 'Feminino' && lowerName.includes('girl')) ||
@@ -407,12 +489,17 @@ function App() {
     run();
   }, [data]);
   
-  // Se o usuário marcar como prematuro enquanto o IMC estiver selecionado, muda para peso.
+  // Se o usuário marcar como prematuro enquanto o IMC estiver selecionado, muda para peso caso a IG seja menor ou igual a 60 semanas.
   useEffect(() => {
     if (data.isPremature && activeMeasure === 'bmi') {
-        setActiveMeasure('weight');
+        const gestAgeWeeks = Number(data.gestationalAgeWeeks);
+        const gestAgeDays = Number(data.gestationalAgeDays);
+        const currentPCADays = calculatePostConceptualAgeDays(data.birthDate, data.curr.date, gestAgeWeeks, gestAgeDays);
+        if (currentPCADays > 0 && currentPCADays <= 60 * 7) {
+            setActiveMeasure('weight');
+        }
     }
-  }, [data.isPremature, activeMeasure]);
+  }, [data.isPremature, data.birthDate, data.curr.date, data.gestationalAgeWeeks, data.gestationalAgeDays, activeMeasure]);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(summary);
@@ -454,7 +541,14 @@ function App() {
     { id: 'cephalic', label: 'Perím. Cefálico' },
     { id: 'bmi', label: 'IMC' },
   ];
-  const chartOptions = data.isPremature ? baseChartOptions.filter(opt => opt.id !== 'bmi') : baseChartOptions;
+  
+  const currentPCAForOptions = data.isPremature 
+    ? calculatePostConceptualAgeDays(data.birthDate, data.curr.date, Number(data.gestationalAgeWeeks), Number(data.gestationalAgeDays)) 
+    : 0;
+
+  const chartOptions = (data.isPremature && currentPCAForOptions > 0 && currentPCAForOptions <= 60 * 7)
+    ? baseChartOptions.filter(opt => opt.id !== 'bmi')
+    : baseChartOptions;
 
   const timeRangeOptions = [
     { label: '6 Meses', days: 180 },
