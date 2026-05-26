@@ -16,11 +16,356 @@ import {
   ClipboardDocumentListIcon,
   TableCellsIcon,
   EyeDropperIcon,
+  FolderOpenIcon,
+  InformationCircleIcon,
+  ArrowPathIcon,
+  ArrowUpTrayIcon,
+  CheckCircleIcon,
+  XCircleIcon,
 } from '@heroicons/react/24/outline';
+import * as XLSX from 'xlsx';
+
+// Mapeamento dos 8 arquivos padrão da OMS e suas respectivas métricas e sexos
+const FILE_DEFINITIONS = [
+  { fileName: 'lhfa-girls-zscore-expanded-tables.xlsx', measure: 'height', sex: 'Feminino', label: 'Estatura (Meninas)' },
+  { fileName: 'lhfa-boys-zscore-expanded-tables.xlsx', measure: 'height', sex: 'Masculino', label: 'Estatura (Meninos)' },
+  { fileName: 'wfa-girls-zscore-expanded-tables.xlsx', measure: 'weight', sex: 'Feminino', label: 'Peso (Meninas)' },
+  { fileName: 'wfa-boys-zscore-expanded-tables.xlsx', measure: 'weight', sex: 'Masculino', label: 'Peso (Meninos)' },
+  { fileName: 'bfa-girls-zscore-expanded-tables.xlsx', measure: 'bmi', sex: 'Feminino', label: 'IMC (Meninas)' },
+  { fileName: 'bfa-boys-zscore-expanded-tables.xlsx', measure: 'bmi', sex: 'Masculino', label: 'IMC (Meninos)' },
+  { fileName: 'hcfa-girls-zscore-expanded-tables.xlsx', measure: 'cephalic', sex: 'Feminino', label: 'Perím. Cefálico (Meninas)' },
+  { fileName: 'hcfa-boys-zscore-expanded-tables.xlsx', measure: 'cephalic', sex: 'Masculino', label: 'Perím. Cefálico (Meninos)' },
+];
+
+// Importa planilhas locais compiladas para checar status no painel
+import weight_Feminino from './services/oms-data/weight_Feminino.json';
+import weight_Masculino from './services/oms-data/weight_Masculino.json';
+import height_Feminino from './services/oms-data/height_Feminino.json';
+import height_Masculino from './services/oms-data/height_Masculino.json';
+import bmi_Feminino from './services/oms-data/bmi_Feminino.json';
+import bmi_Masculino from './services/oms-data/bmi_Masculino.json';
+import cephalic_Feminino from './services/oms-data/cephalic_Feminino.json';
+import cephalic_Masculino from './services/oms-data/cephalic_Masculino.json';
 
 function App() {
   // Get today's date for default initialization
   const today = new Date().toISOString().split('T')[0];
+
+  const [localRecordsCount, setLocalRecordsCount] = useState<number>(0);
+  const [syncStatus, setSyncStatus] = useState<{
+    loading: boolean;
+    progress: string;
+    logs: string[];
+    error?: string;
+    success?: string;
+  }>({
+    loading: false,
+    progress: '',
+    logs: [],
+  });
+
+  // Config do GitHub
+  const [githubRepo, setGithubRepo] = useState<string>('migueljanssen13/puericultura-pro');
+  const [githubBranch, setGithubBranch] = useState<string>('main');
+  const [githubFolder, setGithubFolder] = useState<string>('Dados-OMS');
+
+  const [activeImportTab, setActiveImportTab] = useState<'upload' | 'github'>('upload');
+
+  const countTotalRecords = () => {
+    let count = 0;
+    // Json estático pré-compilado
+    count += (weight_Feminino?.length || 0) + (weight_Masculino?.length || 0);
+    count += (height_Feminino?.length || 0) + (height_Masculino?.length || 0);
+    count += (bmi_Feminino?.length || 0) + (bmi_Masculino?.length || 0);
+    count += (cephalic_Feminino?.length || 0) + (cephalic_Masculino?.length || 0);
+
+    // Dados salvos de forma dinâmica em localStorage pelo usuário
+    FILE_DEFINITIONS.forEach(def => {
+      try {
+        const stored = localStorage.getItem(`puericultura_oms_${def.measure}_${def.sex}`);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed)) {
+            count += parsed.length;
+          }
+        }
+      } catch (e) {}
+    });
+
+    setLocalRecordsCount(count);
+  };
+
+  useEffect(() => {
+    countTotalRecords();
+  }, []);
+
+  const parseXlsxBuffer = (arrayBuffer: ArrayBuffer, measure: string): any[] => {
+    const data = new Uint8Array(arrayBuffer);
+    const workbook = XLSX.read(data, { type: 'array' });
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json<any>(worksheet);
+
+    const processedPoints: any[] = [];
+    const cleanKey = (k: string) => k.trim().toLowerCase();
+
+    for (const row of rows) {
+      const keys = Object.keys(row);
+      const getVal = (possibleNames: string[]): number | null => {
+        for (const name of possibleNames) {
+          const found = keys.find(k => cleanKey(k) === cleanKey(name));
+          if (found !== undefined) {
+            const val = row[found];
+            return val !== null && val !== undefined ? Number(val) : null;
+          }
+        }
+        return null;
+      };
+
+      const day = getVal(['day', 'age_days', 'days', 'day_number']);
+      if (day === null || isNaN(day)) {
+        continue;
+      }
+
+      // Desvios
+      let sd4neg = getVal(['sd4neg', 'sd4_neg', 'sd_4neg', 'sd4n']) ?? 0;
+      let sd3neg = getVal(['sd3neg', 'sd3_neg', 'sd_3neg', 'sd3n', 'sd3negativa']) ?? 0;
+      let sd2neg = getVal(['sd2neg', 'sd2_neg', 'sd_2neg', 'sd2n', 'sd2negativa']) ?? 0;
+      let sd1neg = getVal(['sd1neg', 'sd1_neg', 'sd_1neg', 'sd1n', 'sd1negativa']) ?? 0;
+      let sd0    = getVal(['sd0', 'z0', 'z_0', 'sd00', 'sd_0', 'm', 'median']) ?? 0;
+      let sd1    = getVal(['sd1', 'z1', 'z_pos_1', 'sd1p', 'sd1positiva']) ?? 0;
+      let sd2    = getVal(['sd2', 'z2', 'z_pos_2', 'sd2p', 'sd2positiva']) ?? 0;
+      let sd3    = getVal(['sd3', 'z3', 'z_pos_3', 'sd3p', 'sd3positiva']) ?? 0;
+      let sd4    = getVal(['sd4', 'z4', 'z_pos_4', 'sd4p', 'sd4positiva']) ?? 0;
+
+      // Conversão automática de peso de Kg para Gramas no frontend se necessário
+      if (measure === 'weight' && sd0 < 100 && sd0 > 0) {
+        sd4neg = Math.round(sd4neg * 1000);
+        sd3neg = Math.round(sd3neg * 1000);
+        sd2neg = Math.round(sd2neg * 1000);
+        sd1neg = Math.round(sd1neg * 1000);
+        sd0    = Math.round(sd0 * 1000);
+        sd1    = Math.round(sd1 * 1000);
+        sd2    = Math.round(sd2 * 1000);
+        sd3    = Math.round(sd3 * 1000);
+        sd4    = Math.round(sd4 * 1000);
+      }
+
+      processedPoints.push({
+        age_days: Math.round(day),
+        z_neg_4: Number(sd4neg.toFixed(2)),
+        z_neg_3: Number(sd3neg.toFixed(2)),
+        z_neg_2: Number(sd2neg.toFixed(2)),
+        z_neg_1: Number(sd1neg.toFixed(2)),
+        z_0:     Number(sd0.toFixed(2)),
+        z_pos_1: Number(sd1.toFixed(2)),
+        z_pos_2: Number(sd2.toFixed(2)),
+        z_pos_3: Number(sd3.toFixed(2)),
+        z_pos_4: Number(sd4.toFixed(2)),
+      });
+    }
+
+    processedPoints.sort((a, b) => a.age_days - b.age_days);
+    return processedPoints;
+  };
+
+  const saveJsonToServer = async (measure: string, sex: string, points: any[]) => {
+    try {
+      const response = await fetch('/api/save-oms-json', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ measure, sex, data: points }),
+      });
+      const res = await response.json();
+      return !!res.success;
+    } catch (e) {
+      console.error('[Save to Server Error]', e);
+      return false;
+    }
+  };
+
+  const syncFromGitHub = async () => {
+    setSyncStatus({
+      loading: true,
+      progress: 'Iniciando sincronização...',
+      logs: ['Estabelecendo contato com o GitHub Raw...'],
+    });
+
+    const repoClean = githubRepo.replace('https://github.com/', '').trim();
+    const branch = githubBranch.trim() || 'main';
+    const folder = githubFolder.trim() ? githubFolder.trim().replace(/\/$/, '') : '';
+
+    let successCount = 0;
+    let totalPointsLoaded = 0;
+    let currentLogs = ['Estabelecendo contato com o GitHub Raw...', `Repositório configurado: ${repoClean}`];
+
+    try {
+      for (const def of FILE_DEFINITIONS) {
+        currentLogs = [...currentLogs, `Baixando ${def.fileName}...`];
+        setSyncStatus(prev => ({
+          ...prev,
+          progress: `Baixando ${successCount}/8: ${def.label}...`,
+          logs: currentLogs
+        }));
+
+        const folderPart = folder ? folder + '/' : '';
+        const url = `https://raw.githubusercontent.com/${repoClean}/${branch}/${folderPart}${def.fileName}`;
+
+        try {
+          const response = await fetch(url);
+          if (!response.ok) {
+            throw new Error(`Erro HTTP ${response.status} ao baixar arquivo.`);
+          }
+
+          const buffer = await response.arrayBuffer();
+          const points = parseXlsxBuffer(buffer, def.measure);
+          
+          if (points.length > 0) {
+            localStorage.setItem(`puericultura_oms_${def.measure}_${def.sex}`, JSON.stringify(points));
+            const savedServer = await saveJsonToServer(def.measure, def.sex, points);
+            successCount++;
+            totalPointsLoaded += points.length;
+            if (savedServer) {
+              currentLogs = [...currentLogs, `✓ SUCESSO: ${def.label} (${points.length} pts) integrado no projeto.`];
+            } else {
+              currentLogs = [...currentLogs, `✓ SUCESSO: ${def.label} (${points.length} pts) em cache local.`];
+            }
+          } else {
+            throw new Error('Nenhum ponto válido encontrado no arquivo.');
+          }
+        } catch (fileErrObj: any) {
+          const fileErr = fileErrObj as Error;
+          currentLogs = [...currentLogs, `✗ FALHA em ${def.fileName}: ${fileErr.message}`];
+        }
+      }
+
+      if (successCount > 0) {
+        setSyncStatus({
+          loading: false,
+          progress: 'Finalizado com SUCESSO!',
+          logs: [...currentLogs, `✓ Sincronização concluída! Carregado ${totalPointsLoaded} pontos do GitHub em ${successCount}/8 curvas.`],
+          success: `Banco de dados sincronizado com sucesso! ${successCount} curvas gravadas e prontas para uso.`,
+        });
+        countTotalRecords();
+      } else {
+        setSyncStatus({
+          loading: false,
+          progress: 'Incompatibilidade ou falha.',
+          logs: [...currentLogs, `✗ Nenhuma curva pôde ser sincronizada do GitHub.`],
+          error: 'Nenhum dos 8 arquivos foi carregado do GitHub. Certifique-se de que o repositório é público e que o caminho/branch estão corretos ou use o Upload manual.',
+        });
+      }
+
+    } catch (e: any) {
+      setSyncStatus({
+        loading: false,
+        progress: 'Ocorreu um erro geral.',
+        logs: [...currentLogs, `ERRO GERAL: ${e.message}`],
+        error: `Ocorreu um erro na requisição: ${e.message}. Verifique sua conexão e tente o upload manual de arquivos XLSX do seu PC.`,
+      });
+    }
+  };
+
+  const handleXlsxFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setSyncStatus({
+      loading: true,
+      progress: 'Garantindo leitura dos arquivos...',
+      logs: [`Carregando ${files.length} arquivo(s) selecionado(s)...`],
+    });
+
+    let successCount = 0;
+    let totalPointsLoaded = 0;
+    let currentLogs = [`Carregando ${files.length} arquivo(s) selecionado(s)...`];
+
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const lowerName = file.name.toLowerCase();
+        
+        const matchedDef = FILE_DEFINITIONS.find(def => 
+          lowerName.includes(def.measure) && 
+          (lowerName.includes(def.sex.toLowerCase()) || 
+           (def.sex === 'Feminino' && lowerName.includes('girl')) ||
+           (def.sex === 'Masculino' && lowerName.includes('boy')))
+        ) || FILE_DEFINITIONS.find(def => {
+          if (def.measure === 'height' && lowerName.includes('lhfa')) return true;
+          if (def.measure === 'weight' && lowerName.includes('wfa')) return true;
+          if (def.measure === 'bmi' && lowerName.includes('bfa')) return true;
+          if (def.measure === 'cephalic' && lowerName.includes('hcfa')) return true;
+          return false;
+        });
+
+        if (!matchedDef) {
+          currentLogs = [...currentLogs, `⚠️ Ignorado ${file.name}: Sem correspondência automática (renomeie ou garanta o padrão de nome).` ];
+          continue;
+        }
+
+        try {
+          const buffer = await file.arrayBuffer();
+          const points = parseXlsxBuffer(buffer, matchedDef.measure);
+          
+          if (points.length > 0) {
+            localStorage.setItem(`puericultura_oms_${matchedDef.measure}_${matchedDef.sex}`, JSON.stringify(points));
+            const savedServer = await saveJsonToServer(matchedDef.measure, matchedDef.sex, points);
+            successCount++;
+            totalPointsLoaded += points.length;
+            if (savedServer) {
+              currentLogs = [...currentLogs, `✓ SUCESSO: "${file.name}" importado e integrado no projeto (${points.length} pts).` ];
+            } else {
+              currentLogs = [...currentLogs, `✓ SUCESSO: "${file.name}" importado em cache local (${points.length} pts).` ];
+            }
+            setSyncStatus(prev => ({
+              ...prev,
+              progress: `Processando arquivo ${i+1}/${files.length}: ${file.name}...`,
+              logs: currentLogs
+            }));
+          } else {
+            throw new Error('Nenhum registro com colunas Day e SDs válidas.');
+          }
+        } catch (err: any) {
+          currentLogs = [...currentLogs, `✗ FALHA ao ler ${file.name}: ${err.message}`];
+        }
+      }
+
+      if (successCount > 0) {
+        setSyncStatus({
+          loading: false,
+          progress: 'Carregamento finalizado!',
+          logs: [...currentLogs, `✓ Upload concluído. Total de registros adicionados ao navegador: ${totalPointsLoaded}`],
+          success: `Importação local realizada com sucesso! Carregamos ${successCount} arquivo(s) com ${totalPointsLoaded} pontos totais.`,
+        });
+        countTotalRecords();
+      } else {
+        setSyncStatus({
+          loading: false,
+          progress: 'Falha ao importar.',
+          logs: [...currentLogs, `✗ Nenhum dos arquivos importados pôde ser interpretado.`],
+          error: 'Não foi possível ler as tabelas. Lembre-se de subir as planilhas da OMS com as colunas certas!',
+        });
+      }
+
+    } catch (e: any) {
+      setSyncStatus({
+        loading: false,
+        progress: 'Erro no processamento.',
+        logs: [...currentLogs, `FALHA GERAL: ${e.message}`],
+        error: `Ocorreu um erro no processador local: ${e.message}`,
+      });
+    }
+  };
+
+  const clearLocalDatabase = () => {
+    if (confirm("Tem certeza que deseja zerar os arquivos locais de curvas Z-score da OMS persistidos neste navegador?")) {
+      FILE_DEFINITIONS.forEach(def => {
+        localStorage.removeItem(`puericultura_oms_${def.measure}_${def.sex}`);
+      });
+      countTotalRecords();
+      alert("Banco de dados local limpo! O aplicativo voltou a consultar o Supabase.");
+    }
+  };
 
   const [data, setData] = useState<AssessmentData>({
     birthDate: today,
@@ -142,16 +487,37 @@ function App() {
             </div>
           </div>
           
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 md:gap-4">
+            {/* Status do Banco Local (GitHub) */}
+            <div className={`flex items-center gap-2 px-3 py-0.5 rounded-full text-[10px] font-medium ${
+              localRecordsCount > 0 ? 'bg-emerald-800/60 text-emerald-100' : 'bg-amber-800/60 text-amber-100'
+            }`}>
+              {localRecordsCount > 0 ? (
+                <>
+                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></div>
+                  <span className="flex items-center gap-1">
+                    <FolderOpenIcon className="w-3 h-3" /> GitHub OMS: Ativo ({localRecordsCount} pts)
+                  </span>
+                </>
+              ) : (
+                <>
+                  <div className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></div>
+                  <span className="flex items-center gap-1">
+                    <FolderOpenIcon className="w-3 h-3" /> GitHub OMS: s/ dados xlsx
+                  </span>
+                </>
+              )}
+            </div>
+
             <div className="hidden md:flex items-center gap-2 bg-teal-800/50 px-3 py-0.5 rounded-full text-[10px] font-medium">
               {dbStatus === 'checking' && (
-                <span className="text-teal-200 animate-pulse">Verificando conexão...</span>
+                <span className="text-teal-200 animate-pulse">Verificando Supabase...</span>
               )}
               {dbStatus === 'connected' && (
                 <>
                   <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></div>
                   <span className="text-teal-50 flex items-center gap-1">
-                    <CloudIcon className="w-3 h-3" /> Online
+                    <CloudIcon className="w-3 h-3" /> Supabase Online
                   </span>
                 </>
               )}
@@ -159,7 +525,7 @@ function App() {
                 <>
                   <div className="w-1.5 h-1.5 rounded-full bg-orange-400"></div>
                   <span className="text-orange-100 flex items-center gap-1">
-                    <SignalSlashIcon className="w-3 h-3" /> Offline (Demo)
+                    <SignalSlashIcon className="w-3 h-3" /> Supabase Offline
                   </span>
                 </>
               )}
@@ -172,6 +538,180 @@ function App() {
         
         {/* BARRA LATERAL (Sempre visível) */}
         <div className="lg:col-span-4 space-y-4">
+          
+          {/* Gerenciador de Banco de Dados Local (XLSX & GitHub) */}
+          <section className="bg-gradient-to-br from-slate-50 to-teal-50/50 p-4 rounded-xl border border-teal-200/40 shadow-sm leading-relaxed">
+            <div className="flex items-start gap-2.5">
+              <FolderOpenIcon className="w-5 h-5 text-teal-700 shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <h3 className="text-sm font-bold text-slate-800">Sincronização de Tabelas OMS (XLSX)</h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  Carregue as planilhas completas da OMS para habilitar a busca de Z-scores offline no navegador.
+                </p>
+
+                {/* Status DB */}
+                <div className="mt-2.5 bg-white border border-teal-200/50 rounded-lg p-2.5 text-xs">
+                  <div className="flex justify-between items-center">
+                    <span className="font-semibold text-slate-700">Banco de Dados Ativo:</span>
+                    <span className="font-bold text-teal-700">{localRecordsCount} pontos de curva</span>
+                  </div>
+                  {localRecordsCount > 0 && (
+                    <div className="mt-1 flex gap-2 justify-end">
+                      <button 
+                        onClick={clearLocalDatabase}
+                        className="text-[10px] text-red-600 hover:text-red-700 underline font-medium"
+                      >
+                        Limpar Banco Local
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Selecionar Método */}
+                <div className="mt-3 flex rounded-md bg-slate-100 p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setActiveImportTab('upload')}
+                    className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${
+                      activeImportTab === 'upload'
+                        ? 'bg-white text-teal-700 shadow-sm'
+                        : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                  >
+                    <ArrowUpTrayIcon className="w-3.5 h-3.5 inline mr-1" />
+                    Upload XLSX
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveImportTab('github')}
+                    className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${
+                      activeImportTab === 'github'
+                        ? 'bg-white text-teal-700 shadow-sm'
+                        : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                  >
+                    <ArrowPathIcon className="w-3.5 h-3.5 inline mr-1" />
+                    Do GitHub
+                  </button>
+                </div>
+
+                {/* Conteúdo Aba Upload */}
+                {activeImportTab === 'upload' && (
+                  <div className="mt-3 space-y-2">
+                    <p className="text-[11px] text-slate-600">
+                      Selecione os 8 arquivos <code className="font-mono bg-slate-100 text-teal-700 px-1 py-0.2 rounded">.xlsx</code> que você fez o upload no GitHub. O app os processará de forma offline em milissegundos.
+                    </p>
+                    <label className="flex flex-col items-center justify-center border-2 border-dashed border-teal-200 hover:border-teal-400 bg-white hover:bg-teal-50 px-4 py-3 rounded-lg cursor-pointer transition-colors text-center">
+                      <ArrowUpTrayIcon className="w-6 h-6 text-teal-500 mb-1" />
+                      <span className="text-xs font-bold text-slate-700">Escolher Arquivos Excel (.xlsx)</span>
+                      <span className="text-[10px] text-slate-400 mt-0.5">Selecione os múltiplos arquivos OMS</span>
+                      <input 
+                        type="file" 
+                        accept=".xlsx" 
+                        multiple 
+                        onChange={handleXlsxFileUpload} 
+                        className="hidden" 
+                        disabled={syncStatus.loading}
+                      />
+                    </label>
+                  </div>
+                )}
+
+                {/* Conteúdo Aba GitHub */}
+                {activeImportTab === 'github' && (
+                  <div className="mt-3 space-y-2 text-xs">
+                    <p className="text-[11px] text-slate-600">
+                      Baixe os arquivos brutos diretamente do seu repositório público do GitHub de forma rápida e transparente.
+                    </p>
+                    
+                    <div className="space-y-2 bg-white p-2.5 rounded-lg border border-slate-200">
+                      <div>
+                        <label className="block text-[10px] uppercase font-bold text-slate-400">Repositório GitHub</label>
+                        <input 
+                          type="text" 
+                          value={githubRepo} 
+                          onChange={(e) => setGithubRepo(e.target.value)}
+                          placeholder="usuario/repositorio"
+                          className="w-full mt-0.5 px-2 py-1 text-xs border rounded focus:outline-none focus:ring-1 focus:ring-teal-500 font-mono"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[10px] uppercase font-bold text-slate-400">Branch</label>
+                          <input 
+                            type="text" 
+                            value={githubBranch} 
+                            onChange={(e) => setGithubBranch(e.target.value)}
+                            className="w-full mt-0.5 px-2 py-1 text-xs border rounded focus:outline-none focus:ring-1 focus:ring-teal-500 font-mono"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] uppercase font-bold text-slate-400">Pasta Interna</label>
+                          <input 
+                            type="text" 
+                            value={githubFolder} 
+                            onChange={(e) => setGithubFolder(e.target.value)}
+                            placeholder="Ex: Dados-OMS"
+                            className="w-full mt-0.5 px-2 py-1 text-xs border rounded focus:outline-none focus:ring-1 focus:ring-teal-500 font-mono"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={syncFromGitHub}
+                      disabled={syncStatus.loading}
+                      className="w-full bg-teal-600 hover:bg-teal-700 disabled:bg-slate-300 text-white font-bold py-1.5 px-3 rounded-lg text-xs flex items-center justify-center gap-1.5 transition-colors shadow-sm"
+                    >
+                      {syncStatus.loading ? (
+                        <>
+                          <ArrowPathIcon className="w-3.5 h-3.5 animate-spin" />
+                          {syncStatus.progress}
+                        </>
+                      ) : (
+                        <>
+                          <ArrowPathIcon className="w-3.5 h-3.5" />
+                          Sincronizar do GitHub Raw
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
+
+                {/*Logs e Mensagens de Feedback */}
+                {(syncStatus.error || syncStatus.success || syncStatus.logs.length > 0) && (
+                  <div className="mt-3 space-y-2">
+                    {syncStatus.error && (
+                      <div className="p-2 border border-red-200 bg-red-50 text-red-700 rounded-lg text-[11px] flex gap-1.5 items-start">
+                        <XCircleIcon className="w-4 h-4 shrink-0 mt-0.5 text-red-500 text-xs" />
+                        <div>{syncStatus.error}</div>
+                      </div>
+                    )}
+                    {syncStatus.success && (
+                      <div className="p-2 border border-green-200 bg-green-50 text-green-700 rounded-lg text-[11px] flex gap-1.5 items-start">
+                        <CheckCircleIcon className="w-4 h-4 shrink-0 mt-0.5 text-green-500 text-xs" />
+                        <div>{syncStatus.success}</div>
+                      </div>
+                    )}
+                    {syncStatus.logs.length > 0 && (
+                      <div className="bg-slate-900 border border-slate-800 text-slate-300 rounded-lg p-2 font-mono text-[9px] max-h-32 overflow-y-auto leading-relaxed">
+                        <div className="text-slate-400 border-b border-slate-800 pb-1 mb-1 font-bold flex justify-between">
+                          <span>Log de Atividades:</span>
+                          <span className="text-[8px]">{syncStatus.loading ? 'Atualizando...' : 'Finalizado'}</span>
+                        </div>
+                        {syncStatus.logs.map((log, index) => (
+                          <div key={index} className="truncate">{log}</div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+              </div>
+            </div>
+          </section>
+
           <section>
              <div className="flex items-center gap-2 mb-2">
                <CalculatorIcon className="w-4 h-4 text-teal-700" />

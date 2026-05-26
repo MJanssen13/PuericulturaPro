@@ -1,6 +1,27 @@
 import { Sex, ReferenceDataPoint } from '../types';
 import { supabase } from '../lib/supabase';
 
+// Importa os arquivos JSON compilados a partir das tabelas da OMS
+import weight_Feminino from './oms-data/weight_Feminino.json';
+import weight_Masculino from './oms-data/weight_Masculino.json';
+import height_Feminino from './oms-data/height_Feminino.json';
+import height_Masculino from './oms-data/height_Masculino.json';
+import bmi_Feminino from './oms-data/bmi_Feminino.json';
+import bmi_Masculino from './oms-data/bmi_Masculino.json';
+import cephalic_Feminino from './oms-data/cephalic_Feminino.json';
+import cephalic_Masculino from './oms-data/cephalic_Masculino.json';
+
+const LOCAL_OMS_DATA: Record<string, ReferenceDataPoint[]> = {
+  weight_Feminino: weight_Feminino as ReferenceDataPoint[],
+  weight_Masculino: weight_Masculino as ReferenceDataPoint[],
+  height_Feminino: height_Feminino as ReferenceDataPoint[],
+  height_Masculino: height_Masculino as ReferenceDataPoint[],
+  bmi_Feminino: bmi_Feminino as ReferenceDataPoint[],
+  bmi_Masculino: bmi_Masculino as ReferenceDataPoint[],
+  cephalic_Feminino: cephalic_Feminino as ReferenceDataPoint[],
+  cephalic_Masculino: cephalic_Masculino as ReferenceDataPoint[],
+};
+
 // ================================================================
 // DADOS DE DEMONSTRAÇÃO (FALLBACK)
 // Usados se o banco de dados estiver offline ou vazio.
@@ -40,14 +61,14 @@ const getMockData = (measure: string, sex: Sex) => {
 
 
 // Cache simples para evitar chamar o banco toda hora
-const tableCache: Record<string, { data: ReferenceDataPoint[], source: 'supabase' | 'mock' }> = {};
+const tableCache: Record<string, { data: ReferenceDataPoint[], source: 'supabase' | 'local' | 'mock' }> = {};
 
 type ReferenceMeasure = 'weight' | 'height' | 'bmi' | 'cephalic' | 'preterm_weight' | 'preterm_height' | 'preterm_cephalic';
 
 export async function getReferenceTable(
   measure: ReferenceMeasure,
   sex: Sex
-): Promise<{ data: ReferenceDataPoint[], source: 'supabase' | 'mock' }> {
+): Promise<{ data: ReferenceDataPoint[], source: 'supabase' | 'local' | 'mock' }> {
   const cacheKey = `${measure}_${sex}`;
   
   // Se já temos em cache, retorna imediato
@@ -55,7 +76,35 @@ export async function getReferenceTable(
 
   console.log(`[Puericultura] Buscando tabela: ${measure} (${sex})...`);
 
-  // Busca do Supabase
+  // 1ª PRIORIDADE: Dados salvos localmente no navegador (localStorage) via upload ou sincronização do GitHub do usuário
+  try {
+    const storageKey = `puericultura_oms_${measure}_${sex}`;
+    const stored = localStorage.getItem(storageKey);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        console.log(`[LocalStorage Success] Usando dados carregados pelo usuário com ${parsed.length} registros para ${measure} (${sex})`);
+        const result = { data: parsed, source: 'local' as const };
+        tableCache[cacheKey] = result;
+        return result;
+      }
+    }
+  } catch (err) {
+    console.warn('[LocalStorage Read Error]', err);
+  }
+
+  // 1.5ª PRIORIDADE: Banco de Dados pré-compilado local de arquivos JSON (GitHub)
+  if (!measure.startsWith('preterm')) {
+    const localData = LOCAL_OMS_DATA[cacheKey];
+    if (localData && localData.length > 0) {
+      console.log(`[Local Files Success] Usando dados locais com ${localData.length} registros para ${measure} (${sex})`);
+      const result = { data: localData, source: 'local' as const };
+      tableCache[cacheKey] = result;
+      return result;
+    }
+  }
+
+  // 2ª PRIORIDADE: Supabase (Se configurado e respondendo)
   try {
     const tableName = measure.startsWith('preterm') ? 'intergrowth_curves' : 'reference_curves';
     const measureName = measure.startsWith('preterm') ? measure.replace('preterm_', '') : measure;
@@ -69,7 +118,7 @@ export async function getReferenceTable(
 
     if (error) {
       console.error("[Supabase Error]", error.message);
-      throw error; // Lança o erro para usar o fallback
+      throw error; // Lança o erro para usar o fallback de demonstração
     }
 
     if (data && data.length > 0) {
@@ -79,13 +128,11 @@ export async function getReferenceTable(
       return result;
     } else {
       console.warn(`[Supabase Warning] Nenhum dado encontrado para ${measure} ${sex}. Usando dados de demonstração.`);
-      // Não armazena em cache se o Supabase não tiver dados, para permitir nova tentativa.
       return { data: getMockData(measure, sex), source: 'mock' };
     }
   } catch (e: any) {
     console.error("Falha ao buscar dados do Supabase. Usando dados de demonstração:", e.message);
     const result = { data: getMockData(measure, sex), source: 'mock' as const };
-    // Armazena em cache o fallback em caso de erro para não sobrecarregar o servidor.
     tableCache[cacheKey] = result;
     return result;
   }
